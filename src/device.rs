@@ -157,7 +157,7 @@ pub const VALUE_TO_GROUPNUMBER: [u8; 14] = {
     out
 };
 
-/// Sentinel byte in a connection record's data[1] meaning 'this connector
+/// Sentinel byte in a connection record's `data[1]` meaning 'this connector
 /// has no outgoing link in this preset's chain'.
 pub const UNROUTED: u8 = 0x7F;
 
