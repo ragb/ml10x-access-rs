@@ -1,2 +1,25 @@
+# Cargo
 /target
-/hw-test
+**/*.rs.bk
+Cargo.lock.bak
+
+# Editor / IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Claude Code per-user state (permission grants are local to this machine)
+.claude/settings.local.json
+
+# User preset data — keep example fixtures in tests/fixtures/ but never
+# ship the user's actual rig. `presets/` is what `ml10x dump` writes
+# by convention; `*.local.yaml` is the same intent at file granularity.
+/presets/
+/hw-test/
+*.local.yaml
+
+# MIDI captures collected during reverse-engineering (raw editor traffic,
+# dump-raw.json, hex/syx dumps, etc.). Big and personal.
+/captures/
+**/dump-raw.json
