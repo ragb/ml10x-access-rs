@@ -1,0 +1,21 @@
+[package]
+name = "ml10x"
+version = "0.1.0"
+edition = "2024"
+license = "GPL-3.0-or-later"
+description = "Accessible CLI and YAML workflow for the Morningstar ML10X loop switcher"
+repository = "https://github.com/ragb/ml10x-access-rs"
+
+[lib]
+path = "src/lib.rs"
+
+[[bin]]
+name = "ml10x"
+path = "src/main.rs"
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+thiserror = "2"
+
+[dev-dependencies]
+pretty_assertions = "1"
