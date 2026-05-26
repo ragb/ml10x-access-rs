@@ -22,6 +22,10 @@ dirs = "5"
 thiserror = "2"
 unicode-normalization = "0.1"
 jsonschema = { version = "0.18", default-features = false, features = ["draft202012"] }
+midir = "0.10"
+crossbeam-channel = "0.5"
+log = "0.4"
+env_logger = "0.11"
 
 [dev-dependencies]
 pretty_assertions = "1"
