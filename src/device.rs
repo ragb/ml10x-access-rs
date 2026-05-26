@@ -161,6 +161,62 @@ pub const VALUE_TO_GROUPNUMBER: [u8; 14] = {
 /// has no outgoing link in this preset's chain'.
 pub const UNROUTED: u8 = 0x7F;
 
+/// Selected segment IDs used inside DATA / CONTROLLER_INFO payloads.
+///
+/// Inside controller data (f1=6 f2=1) and preset data (f1=6 f2=0), segments
+/// are keyed by their `id` byte rather than by position.
+pub mod segment_id {
+    // ---- f1=17 CONTROLLER_INFO ----
+    pub const UUID_OR_FIRMWARE: u8 = 0;
+
+    // ---- f1=6 f2=1 CONTROLLER DATA — long names (16 chars, space-padded) ----
+    pub const LOOP_A_TIP: u8 = 0;
+    pub const LOOP_A_RING: u8 = 1;
+    pub const LOOP_B_TIP: u8 = 2;
+    pub const LOOP_B_RING: u8 = 3;
+    pub const LOOP_C_TIP: u8 = 4;
+    pub const LOOP_C_RING: u8 = 5;
+    pub const LOOP_D_TIP: u8 = 6;
+    pub const LOOP_D_RING: u8 = 7;
+    pub const LOOP_E_TIP: u8 = 8;
+    pub const LOOP_E_RING: u8 = 9;
+    pub const INPUT_TIP: u8 = 10;
+    pub const INPUT_RING: u8 = 11;
+    pub const OUTPUT_TIP: u8 = 12;
+    pub const OUTPUT_RING: u8 = 13;
+
+    // ---- f1=6 f2=1 CONTROLLER DATA — global settings (small ints) ----
+    pub const MIDI_CHANNEL: u8 = 32;
+    pub const INCLUDE_IN_TRAILS: u8 = 33;
+    pub const DEVICE_ID: u8 = 34;
+    pub const INPUT_SPLIT: u8 = 35;
+    pub const LOOP_BYPASS_PERSIST: u8 = 36;
+
+    // ---- f1=6 f2=1 CONTROLLER DATA — short names (4 chars, space-padded) ----
+    pub const SHORT_NAMES_FIRST: u8 = 48;
+    pub const INPUT_LABEL_FIRST: u8 = 64;
+    pub const OUTPUT_LABEL_FIRST: u8 = 80;
+
+    // ---- PRESET DATA — common to Simple + Advanced ----
+    pub const SPILLOVER_OUTPUT_TIP: u8 = 16;
+    pub const SPILLOVER_OUTPUT_RING: u8 = 17;
+    pub const PRESET_NAME: u8 = 32;
+
+    // Advanced-only segments (observed only in Advanced WRITE):
+    pub const ADV_FLAG_18: u8 = 18; // 1 byte, observed 0
+    pub const ADV_FLAG_19: u8 = 19; // 3 bytes, observed 00 00 00
+
+    // Simple-only segment:
+    pub const SIMPLE_FLAG_20: u8 = 20;
+
+    // Routing matrix bytes (segment ids 48..63). The device's internal
+    // `matrixArray` per the editor's `addToMatrix(x.id, x.data)`. We
+    // don't emit these on write (the device rebuilds the matrix from
+    // segments 0..13) and we don't decode them on read.
+    pub const MATRIX_ARRAY_FIRST: u8 = 48;
+    pub const MATRIX_ARRAY_LAST: u8 = 63;
+}
+
 pub fn groupnumber_to_slug(gn: u8) -> &'static str {
     CONNECTOR_SLUGS[GROUPNUMBER_TO_VALUE[gn as usize] as usize]
 }
