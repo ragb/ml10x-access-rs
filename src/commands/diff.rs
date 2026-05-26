@@ -88,11 +88,12 @@ pub fn run(ctx: &mut Context, args: Args) -> i32 {
 
     let remote = helpers::try_read_preset(&mut io, local.bank, local.number, Duration::from_secs(2));
 
+    let yaml_bank = local.bank + 1;
     let Some(remote) = remote else {
         ctx.out.error(
             &format!(
                 "Did not receive preset data for bank {} preset {} from the device.",
-                local.bank, local.number
+                yaml_bank, local.number
             ),
             None,
         );
@@ -104,11 +105,11 @@ pub fn run(ctx: &mut Context, args: Args) -> i32 {
         ctx.out.emit_result(
             &json!({
                 "ok": true, "differences": [],
-                "bank": local.bank, "number": local.number,
+                "bank": yaml_bank, "number": local.number,
             }),
             Some(&format!(
                 "No differences. Local and device copies of bank {} preset {} are identical.",
-                local.bank, local.number
+                yaml_bank, local.number
             )),
         );
         return exit_codes::OK;
@@ -119,7 +120,7 @@ pub fn run(ctx: &mut Context, args: Args) -> i32 {
             "{} difference(s) between {} and device bank {} preset {}:",
             diffs.len(),
             args.preset_file.file_name().and_then(|s| s.to_str()).unwrap_or("?"),
-            local.bank,
+            yaml_bank,
             local.number
         ),
         None,
@@ -138,7 +139,7 @@ pub fn run(ctx: &mut Context, args: Args) -> i32 {
     ctx.out.emit_result(
         &json!({
             "ok": true, "differences": diffs,
-            "bank": local.bank, "number": local.number,
+            "bank": yaml_bank, "number": local.number,
         }),
         Some(&format!("{} difference(s).", diffs.len())),
     );
