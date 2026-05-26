@@ -1,0 +1,91 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/ragb/ml10x-access/schemas/preset.schema.json",
+  "title": "ML10X Preset",
+  "description": "One preset on the Morningstar ML10X loop switcher. Note: the ML10X has no per-preset MIDI-message list (that's an MC-series feature); this schema deliberately omits any `midi_messages` field.",
+  "type": "object",
+  "required": ["preset"],
+  "additionalProperties": false,
+  "properties": {
+    "preset": {
+      "type": "object",
+      "required": ["bank", "number", "name"],
+      "additionalProperties": false,
+      "properties": {
+        "bank": {
+          "description": "Which of the 4 banks this preset lives in (matches the editor's 'Bank 1'..'Bank 4' labels).",
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 4
+        },
+        "number": {
+          "description": "Position within the bank (0 through 127, matching the device's MIDI Program Change numbering).",
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 127
+        },
+        "name": {
+          "description": "Display name shown on the ML10X.",
+          "type": "string",
+          "maxLength": 16
+        },
+        "mode": {
+          "description": "Simple vs Advanced preset mode (per the editor's mode toggle).",
+          "type": "string",
+          "enum": ["simple", "advanced"],
+          "default": "simple"
+        },
+        "spillover": {
+          "description": "When the user switches to a different preset, the chosen loop's trail audio continues sounding (provided that loop is bypassed in the next preset). Set per output. 'nothing' is the default.",
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "output_tip":  { "$ref": "#/$defs/spilloverTarget" },
+            "output_ring": { "$ref": "#/$defs/spilloverTarget" }
+          }
+        },
+        "chain": {
+          "description": "Signal chain: the ordered list of connections the audio signal travels through when this preset is active. Each entry says 'signal goes from <from_connector> to <to_connector>'; setting 'bypass: true' on a hop means the destination loop is skipped (signal passes through as if the loop weren't there). Note: bypass is ignored by the firmware in Advanced mode.",
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["from_connector", "to_connector"],
+            "additionalProperties": false,
+            "properties": {
+              "from_connector": { "$ref": "#/$defs/connectorRef" },
+              "to_connector":   { "$ref": "#/$defs/connectorRef" },
+              "bypass":         { "type": "boolean", "default": false }
+            }
+          }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "connectorRef": {
+      "type": "string",
+      "enum": [
+        "a_tip", "a_ring",
+        "b_tip", "b_ring",
+        "c_tip", "c_ring",
+        "d_tip", "d_ring",
+        "e_tip", "e_ring",
+        "input_tip", "input_ring",
+        "output_tip", "output_ring"
+      ]
+    },
+    "spilloverTarget": {
+      "type": "string",
+      "enum": [
+        "nothing",
+        "input_tip", "input_ring",
+        "a_tip", "a_ring",
+        "b_tip", "b_ring",
+        "c_tip", "c_ring",
+        "d_tip", "d_ring",
+        "e_tip", "e_ring"
+      ],
+      "default": "nothing"
+    }
+  }
+}

@@ -1,0 +1,86 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/ragb/ml10x-access/schemas/controller.schema.json",
+  "title": "ML10X Controller (global settings)",
+  "description": "Device-wide settings that aren't per-preset: MIDI channel, device ID, connector names, per-loop include-in-trails toggles, input split and loop bypass persistent flags. One of these per ML10X.",
+  "type": "object",
+  "required": ["controller"],
+  "additionalProperties": false,
+  "properties": {
+    "controller": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "uuid": {
+          "description": "Read-only device serial reported on connect. Editing this in the YAML has no effect.",
+          "type": "string"
+        },
+        "midi_channel": {
+          "description": "MIDI channel the device listens on. 0 means 'ignore MIDI in'.",
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 16
+        },
+        "device_id": {
+          "description": "Per-device routing ID (0..16).",
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 16
+        },
+        "input_split": {
+          "description": "When true, Input Tip and Input Ring are routed independently instead of summed.",
+          "type": "boolean"
+        },
+        "loop_bypass_persistent": {
+          "description": "When true, loop bypass state persists across preset changes for any loop not explicitly set by the new preset.",
+          "type": "boolean"
+        },
+        "include_in_trails": {
+          "description": "Per-loop 'Enable Spillover' flag from Controller Settings. Only the 10 loops have these toggles in the editor UI — the 4 fixed endpoints (Input Tip/Ring, Output Tip/Ring) have no toggle.",
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "a_tip":  { "type": "boolean" }, "a_ring": { "type": "boolean" },
+            "b_tip":  { "type": "boolean" }, "b_ring": { "type": "boolean" },
+            "c_tip":  { "type": "boolean" }, "c_ring": { "type": "boolean" },
+            "d_tip":  { "type": "boolean" }, "d_ring": { "type": "boolean" },
+            "e_tip":  { "type": "boolean" }, "e_ring": { "type": "boolean" }
+          }
+        },
+        "connectors": {
+          "description": "Names for each of the 14 connectors. The 'name' (long, up to 16 chars) is what's shown most places; 'short_name' (up to 4) is for compact displays; 'input_name' / 'output_name' (up to 16 each) label the connector when it's the input or output of a chain.",
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "a_tip":       { "$ref": "#/$defs/connector" },
+            "a_ring":      { "$ref": "#/$defs/connector" },
+            "b_tip":       { "$ref": "#/$defs/connector" },
+            "b_ring":      { "$ref": "#/$defs/connector" },
+            "c_tip":       { "$ref": "#/$defs/connector" },
+            "c_ring":      { "$ref": "#/$defs/connector" },
+            "d_tip":       { "$ref": "#/$defs/connector" },
+            "d_ring":      { "$ref": "#/$defs/connector" },
+            "e_tip":       { "$ref": "#/$defs/connector" },
+            "e_ring":      { "$ref": "#/$defs/connector" },
+            "input_tip":   { "$ref": "#/$defs/connector" },
+            "input_ring":  { "$ref": "#/$defs/connector" },
+            "output_tip":  { "$ref": "#/$defs/connector" },
+            "output_ring": { "$ref": "#/$defs/connector" }
+          }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "connector": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "name":        { "type": "string", "maxLength": 16 },
+        "short_name":  { "type": "string", "maxLength": 4 },
+        "input_name":  { "type": "string", "maxLength": 16 },
+        "output_name": { "type": "string", "maxLength": 16 }
+      }
+    }
+  }
+}
