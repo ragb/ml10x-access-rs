@@ -221,9 +221,12 @@ impl Default for PresetMode {
     }
 }
 
-/// One preset on the ML10X. Banks are 1..4, presets are 0..127 within each
-/// bank (matching the editor's UI numbering and the device's MIDI Program
-/// Change addressing).
+/// One preset on the ML10X.
+///
+/// `bank` is 0..3 (matches the SysEx wire form). The YAML layer maps it
+/// to 1..4 to match the editor's "Bank 1".."Bank 4" labels and the
+/// folder convention. `number` is 0..127 within the bank (matches the
+/// device's MIDI Program Change addressing).
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Preset {
     pub bank: u8,
