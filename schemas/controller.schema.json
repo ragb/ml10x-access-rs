@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://github.com/ragb/ml10x-access/schemas/controller.schema.json",
+  "$id": "https://github.com/ragb/ml10x-access-rs/schemas/controller.schema.json",
   "title": "ML10X Controller (global settings)",
   "description": "Device-wide settings that aren't per-preset: MIDI channel, device ID, connector names, per-loop include-in-trails toggles, input split and loop bypass persistent flags. One of these per ML10X.",
   "type": "object",

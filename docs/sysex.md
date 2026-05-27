@@ -101,16 +101,18 @@ function qi(l){
 }
 ```
 
-Equivalent in Python:
+Equivalent in Rust (see [`sysex::checksum`](../src/sysex.rs)):
 
-```python
-def checksum(message: bytes) -> int:
-    """message is the full frame including F0 and EOX. The two trailing
-    bytes (checksum slot and F7) are excluded from the XOR."""
-    acc = message[0]
-    for b in message[1 : len(message) - 2]:
-        acc ^= b
-    return acc & 0x7F
+```rust
+fn checksum(frame: &[u8]) -> u8 {
+    // frame is the full SysEx including F0 and F7. The two trailing
+    // bytes (checksum slot + F7) are excluded from the XOR.
+    let mut acc = frame[0];
+    for &b in &frame[1..frame.len() - 2] {
+        acc ^= b;
+    }
+    acc & 0x7F
+}
 ```
 
 Note that **F0 (0xF0) is included in the XOR**. The two trailing bytes
@@ -314,8 +316,8 @@ matching displayed values against captured bytes:
 Note: `inputRingSwapPin` is referenced in the editor's `Jb` class and is
 present as `inputRingSwapPin: 0` in JSON device backups, but the
 Controller Settings page on firmware v1.2 has no toggle for it and it
-always reads back as 0. The Python model omits it; if a future firmware
-exposes it we'll add it back with a confirmed segment id.
+always reads back as 0. We omit it from the controller model; if a
+future firmware exposes it we'll add it back with a confirmed segment id.
 
 The `include_in_trails` bitmap (segment 33) has room for 14 bits but
 the editor only renders 10 "Enable Spillover" toggles — one per loop.

@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://github.com/ragb/ml10x-access/schemas/preset.schema.json",
+  "$id": "https://github.com/ragb/ml10x-access-rs/schemas/preset.schema.json",
   "title": "ML10X Preset",
   "description": "One preset on the Morningstar ML10X loop switcher. Note: the ML10X has no per-preset MIDI-message list (that's an MC-series feature); this schema deliberately omits any `midi_messages` field.",
   "type": "object",
@@ -9,7 +9,7 @@
   "properties": {
     "preset": {
       "type": "object",
-      "required": ["bank", "number", "name"],
+      "required": ["bank", "number", "name", "body"],
       "additionalProperties": false,
       "properties": {
         "bank": {
@@ -29,12 +29,6 @@
           "type": "string",
           "maxLength": 16
         },
-        "mode": {
-          "description": "Simple vs Advanced preset mode (per the editor's mode toggle).",
-          "type": "string",
-          "enum": ["simple", "advanced"],
-          "default": "simple"
-        },
         "spillover": {
           "description": "When the user switches to a different preset, the chosen loop's trail audio continues sounding (provided that loop is bypassed in the next preset). Set per output. 'nothing' is the default.",
           "type": "object",
@@ -44,19 +38,12 @@
             "output_ring": { "$ref": "#/$defs/spilloverTarget" }
           }
         },
-        "chain": {
-          "description": "Signal chain: the ordered list of connections the audio signal travels through when this preset is active. Each entry says 'signal goes from <from_connector> to <to_connector>'; setting 'bypass: true' on a hop means the destination loop is skipped (signal passes through as if the loop weren't there). Note: bypass is ignored by the firmware in Advanced mode.",
-          "type": "array",
-          "items": {
-            "type": "object",
-            "required": ["from_connector", "to_connector"],
-            "additionalProperties": false,
-            "properties": {
-              "from_connector": { "$ref": "#/$defs/connectorRef" },
-              "to_connector":   { "$ref": "#/$defs/connectorRef" },
-              "bypass":         { "type": "boolean", "default": false }
-            }
-          }
+        "body": {
+          "description": "Mode-specific routing. Simple is a linear chain with per-loop bypass; Advanced is an arbitrary connection graph with no per-loop bypass (the firmware does not honour it in Advanced presets).",
+          "oneOf": [
+            { "$ref": "#/$defs/simpleBody" },
+            { "$ref": "#/$defs/advancedBody" }
+          ]
         }
       }
     }
@@ -86,6 +73,49 @@
         "e_tip", "e_ring"
       ],
       "default": "nothing"
+    },
+    "simpleBody": {
+      "type": "object",
+      "required": ["mode", "chain"],
+      "additionalProperties": false,
+      "properties": {
+        "mode": { "const": "simple" },
+        "chain": {
+          "description": "Linear signal chain: ordered hops from sources through loops to outputs. Each hop may set `bypass: true` to skip that loop.",
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["from_connector", "to_connector"],
+            "additionalProperties": false,
+            "properties": {
+              "from_connector": { "$ref": "#/$defs/connectorRef" },
+              "to_connector":   { "$ref": "#/$defs/connectorRef" },
+              "bypass":         { "type": "boolean", "default": false }
+            }
+          }
+        }
+      }
+    },
+    "advancedBody": {
+      "type": "object",
+      "required": ["mode", "connections"],
+      "additionalProperties": false,
+      "properties": {
+        "mode": { "const": "advanced" },
+        "connections": {
+          "description": "Routing graph: each edge connects a source to a destination. Branching and merging are allowed. No `bypass` field — the firmware ignores per-loop bypass in Advanced presets.",
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["from_connector", "to_connector"],
+            "additionalProperties": false,
+            "properties": {
+              "from_connector": { "$ref": "#/$defs/connectorRef" },
+              "to_connector":   { "$ref": "#/$defs/connectorRef" }
+            }
+          }
+        }
+      }
     }
   }
 }

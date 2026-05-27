@@ -8,8 +8,10 @@
 //!     MidiIo::send_sysex(&[u8])
 //!     MidiIo::receive_sysex(timeout)
 //!
-//! Unlike `mido`, `midir` delivers the complete SysEx (including
-//! F0/F7) into the callback — we don't reattach delimiters.
+//! SysEx reassembly: midir's WinMM backend on Windows splits messages
+//! larger than its internal buffer (~1 KiB) across multiple callback
+//! invocations. We accumulate from F0 to F7 before forwarding so that
+//! callers always see one complete frame.
 
 use std::time::Duration;
 
@@ -121,9 +123,16 @@ pub fn find_port<'a>(ports: &'a [PortInfo], substring: &str) -> Result<&'a PortI
     }
 }
 
+/// Mutable state for the input callback: a reassembly buffer for the
+/// in-progress SysEx, plus the channel the completed frame is sent on.
+struct InputState {
+    buf: Vec<u8>,
+    tx: Sender<Vec<u8>>,
+}
+
 /// Paired input + output for one MIDI device.
 pub struct MidiIo {
-    _in_conn: MidiInputConnection<Sender<Vec<u8>>>,
+    _in_conn: MidiInputConnection<InputState>,
     out: MidiOutputConnection,
     rx: Receiver<Vec<u8>>,
 }
@@ -182,12 +191,28 @@ impl MidiIo {
             .connect(
                 &in_port,
                 "ml10x-in",
-                move |_timestamp, data, tx_inner| {
-                    if data.first() == Some(&0xF0) {
-                        let _ = tx_inner.send(data.to_vec());
+                move |_timestamp, data, state: &mut InputState| {
+                    if data.is_empty() {
+                        return;
+                    }
+                    if data[0] == 0xF0 {
+                        // Start of a new SysEx; drop any unterminated partial.
+                        state.buf.clear();
+                        state.buf.extend_from_slice(data);
+                    } else if !state.buf.is_empty()
+                        && (data[0] <= 0x7F || data[0] == 0xF7)
+                    {
+                        // Continuation chunk of an in-progress SysEx.
+                        state.buf.extend_from_slice(data);
+                    } else {
+                        // Real-time byte (F8..FE) or stray non-SysEx data.
+                        return;
+                    }
+                    if state.buf.last() == Some(&0xF7) {
+                        let _ = state.tx.send(std::mem::take(&mut state.buf));
                     }
                 },
-                tx,
+                InputState { buf: Vec::new(), tx },
             )
             .map_err(|e| MidiError::Open {
                 direction: "input",

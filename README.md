@@ -4,10 +4,6 @@ A command-line editor for the **Morningstar ML10X** loop switcher.
 Presets and global settings live as YAML files you edit in any editor;
 the `ml10x` CLI syncs them to and from the device over USB MIDI.
 
-This is the Rust port of [ml10x-access](https://github.com/ragb/ml10x-access).
-Same feature set, byte-for-byte compatible wire protocol, but a single
-distributable binary (no Python install).
-
 Status: working against firmware **v1.2**. Verified end-to-end on a real
 ML10X: Simple-mode sync, Advanced-mode sync, full 512-preset backup,
 byte-exact round-trips against the official editor.
@@ -132,16 +128,37 @@ output to one bank; `--empty` includes slots named "Empty".
 ## Preset YAML
 
 ```yaml
-# yaml-language-server: $schema=https://raw.githubusercontent.com/ragb/ml10x-access/main/src/ml10x/schema/preset.schema.json
+# yaml-language-server: $schema=https://raw.githubusercontent.com/ragb/ml10x-access-rs/main/schemas/preset.schema.json
 preset:
   bank: 1                # 1..4 (matches the editor's "Bank 1".."Bank 4")
   number: 0              # 0..127
   name: My Preset        # up to 16 ASCII chars
-  mode: simple           # "simple" or "advanced"
   spillover:
     output_tip: nothing  # nothing | input_tip | input_ring | a_tip..e_ring
     output_ring: nothing
-  chain: []              # signal flow, in order — see examples below
+  body:                  # mode-specific routing — Simple or Advanced
+    mode: simple
+    chain:               # linear signal flow with per-loop bypass
+      - { from_connector: input_tip, to_connector: a_tip,      bypass: false }
+      - { from_connector: a_tip,     to_connector: output_tip, bypass: false }
+```
+
+For Advanced mode, the body uses a `connections:` graph (no `bypass`,
+because the firmware ignores per-loop bypass in Advanced presets):
+
+```yaml
+preset:
+  bank: 1
+  number: 0
+  name: Stereo Out
+  spillover:
+    output_tip: nothing
+    output_ring: nothing
+  body:
+    mode: advanced
+    connections:
+      - { from_connector: input_tip, to_connector: output_tip }
+      - { from_connector: input_tip, to_connector: output_ring }
 ```
 
 The 14 connector slugs:
@@ -158,13 +175,17 @@ device's main I/O.
 
 ### Simple vs Advanced
 
+The two modes have different YAML shapes — Simple has a `chain:` of
+linear hops with per-loop `bypass`, Advanced has a `connections:` graph
+with no `bypass` field. Mixing them is a parse error (caught by the
+schema and by serde), not a lint warning.
+
 In **Simple mode**, the chain is linear; each hop can be bypassed
 independently.
 
 In **Advanced mode**, the routing is a graph (split, merge, multiple
 outputs allowed) and **per-loop bypass is not supported** by the
-current firmware. The lint layer warns about `bypass: true` in Advanced
-presets, and the encoder always sends segment 19 as `[0, 0, 0]`.
+current firmware. The encoder always sends segment 19 as `[0, 0, 0]`.
 
 Default to Simple. Use Advanced only when the routing genuinely needs
 split/merge or different content on the two outputs.
@@ -238,30 +259,15 @@ See `docs/sysex.md` for the wire format. In brief:
   `id=target.gn, data=[source.gn]` per connection.
 - Device acks with `f1=1 f2=2` ("Preset Settings Saved!").
 
-## Differences from the Python port
-
-- Single binary. No interpreter, no virtualenv, no wheel-hunt.
-- Comment-preserving YAML round-trips are dropped. The schema header
-  is preserved (re-prepended on emit) but inline comments and key
-  ordering aren't. Field ordering in the on-disk output is fixed by
-  the serde shim so it still reads top-to-bottom under a screen reader.
-- Schema validation uses the `jsonschema` crate (Draft 2020-12).
-- All fixtures and the JSON Schemas are copied verbatim — protocol
-  truth is identical.
-
 ## Acknowledgements
 
 - Morningstar Engineering for the ML10X and for publishing the MC6/MC8
   SysEx specification (the framing rules are largely shared with the
   ML10X).
-- [`ml10x-access`](https://github.com/ragb/ml10x-access) — the Python
-  reference implementation, where the reverse-engineering work was
-  done.
 - [`guyburton/morningstarmidi`](https://github.com/guyburton/morningstarmidi)
-  for the original MC6/MC8 Python tooling that proved the
-  YAML-over-SysEx pattern.
+  for the original MC6/MC8 tooling that proved the YAML-over-SysEx
+  pattern.
 
 ## License
 
-GPL-3.0-or-later (inherited from the Python project and from
-morningstarmidi, both GPLv3).
+GPL-3.0-or-later (inherited from upstream `morningstarmidi`, GPLv3).

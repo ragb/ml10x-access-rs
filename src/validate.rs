@@ -16,7 +16,7 @@ use jsonschema::{Draft, JSONSchema};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-use crate::presets::{ConnectorSlug, Preset, PresetMode, SpilloverTarget};
+use crate::presets::{ConnectorSlug, Preset, PresetBody, PresetMode, SpilloverTarget};
 
 const PRESET_SCHEMA_SRC: &str = include_str!("../schemas/preset.schema.json");
 const CONTROLLER_SCHEMA_SRC: &str = include_str!("../schemas/controller.schema.json");
@@ -80,7 +80,8 @@ fn format_path(path: &jsonschema::paths::JSONPointer) -> String {
     if s.is_empty() || s == "/" {
         return "(root)".to_string();
     }
-    // Convert "/preset/chain/0/from_connector" → "preset.chain[0].from_connector".
+    // Convert "/preset/body/chain/0/from_connector"
+    //     → "preset.body.chain[0].from_connector".
     let mut out = String::new();
     for part in s.trim_start_matches('/').split('/') {
         if let Ok(idx) = part.parse::<usize>() {
@@ -159,10 +160,19 @@ pub fn validate_preset_semantics(preset: &Preset) -> Vec<Issue> {
     let mut to_seen: HashMap<ConnectorSlug, u32> = HashMap::new();
     let mut hop_pairs_seen: HashSet<(ConnectorSlug, ConnectorSlug)> = HashSet::new();
 
-    for (i, hop) in preset.chain.iter().enumerate() {
-        let path = format!("preset.chain[{i}]");
-        let f = hop.from_connector;
-        let t = hop.to_connector;
+    let (hop_list_path, hops): (&str, Vec<(ConnectorSlug, ConnectorSlug)>) = match &preset.body {
+        PresetBody::Simple { chain } => (
+            "preset.body.chain",
+            chain.iter().map(|h| (h.from_connector, h.to_connector)).collect(),
+        ),
+        PresetBody::Advanced { connections } => (
+            "preset.body.connections",
+            connections.iter().map(|c| (c.from_connector, c.to_connector)).collect(),
+        ),
+    };
+
+    for (i, &(f, t)) in hops.iter().enumerate() {
+        let path = format!("{hop_list_path}[{i}]");
 
         if f.is_output() {
             issues.push(Issue {
@@ -196,14 +206,6 @@ pub fn validate_preset_semantics(preset: &Preset) -> Vec<Issue> {
             });
         }
 
-        if preset.mode == PresetMode::Advanced && hop.bypass {
-            issues.push(Issue {
-                severity: Severity::Warning,
-                path: format!("{path}.bypass"),
-                message: "Advanced-mode presets ignore per-loop bypass on this firmware (per the ML10X manual). Set to `false` or switch to Simple mode if you want this loop bypassed.".to_string(),
-            });
-        }
-
         *from_seen.entry(f).or_default() += 1;
         *to_seen.entry(t).or_default() += 1;
         let pair = (f, t);
@@ -221,7 +223,7 @@ pub fn validate_preset_semantics(preset: &Preset) -> Vec<Issue> {
     }
 
     // Spillover in Advanced mode → firmware drops segments 16/17 on save.
-    if preset.mode == PresetMode::Advanced {
+    if preset.mode() == PresetMode::Advanced {
         for (side, val) in [
             ("output_tip", preset.spillover.output_tip),
             ("output_ring", preset.spillover.output_ring),
@@ -237,28 +239,26 @@ pub fn validate_preset_semantics(preset: &Preset) -> Vec<Issue> {
     }
 
     // At least one input → output path.
-    if !preset.chain.is_empty() {
-        let reachable = reachable_outputs(&preset.chain);
-        if reachable.is_empty() {
-            issues.push(Issue {
-                severity: Severity::Warning,
-                path: "preset.chain".to_string(),
-                message: "no path from an input (input_tip / input_ring) reaches an output (output_tip / output_ring) — no audio will flow.".to_string(),
-            });
-        }
+    if !hops.is_empty() && reachable_outputs(&hops).is_empty() {
+        issues.push(Issue {
+            severity: Severity::Warning,
+            path: hop_list_path.to_string(),
+            message: "no path from an input (input_tip / input_ring) reaches an output (output_tip / output_ring) — no audio will flow.".to_string(),
+        });
     }
 
-    // Simple mode is linear: no branching, no merging.
-    if preset.mode == PresetMode::Simple {
+    // Simple mode is linear: no branching, no merging. (Advanced bypass
+    // is unrepresentable in the model, so no warning is needed for it.)
+    if let PresetBody::Simple { .. } = &preset.body {
         let mut from_branches: Vec<(ConnectorSlug, u32)> =
             from_seen.iter().filter(|&(_, &n)| n > 1).map(|(c, n)| (*c, *n)).collect();
         from_branches.sort_by_key(|(c, _)| c.slug());
         for (slug, n) in from_branches {
             issues.push(Issue {
                 severity: Severity::Error,
-                path: "preset.chain".to_string(),
+                path: hop_list_path.to_string(),
                 message: format!(
-                    "Simple mode: {:?} appears {} times as a `from_connector`, which would branch the signal. Switch `mode` to `advanced` to allow branching.",
+                    "Simple mode: {:?} appears {} times as a `from_connector`, which would branch the signal. Switch to Advanced (`body.mode: advanced`) to allow branching.",
                     slug.slug(),
                     n
                 ),
@@ -270,9 +270,9 @@ pub fn validate_preset_semantics(preset: &Preset) -> Vec<Issue> {
         for (slug, n) in to_merges {
             issues.push(Issue {
                 severity: Severity::Error,
-                path: "preset.chain".to_string(),
+                path: hop_list_path.to_string(),
                 message: format!(
-                    "Simple mode: {:?} appears {} times as a `to_connector`, which would merge multiple signals. Switch `mode` to `advanced` to allow merging.",
+                    "Simple mode: {:?} appears {} times as a `to_connector`, which would merge multiple signals. Switch to Advanced (`body.mode: advanced`) to allow merging.",
                     slug.slug(),
                     n
                 ),
@@ -283,13 +283,10 @@ pub fn validate_preset_semantics(preset: &Preset) -> Vec<Issue> {
     issues
 }
 
-fn reachable_outputs(chain: &[crate::presets::ChainHop]) -> HashSet<ConnectorSlug> {
+fn reachable_outputs(hops: &[(ConnectorSlug, ConnectorSlug)]) -> HashSet<ConnectorSlug> {
     let mut by_from: HashMap<ConnectorSlug, Vec<ConnectorSlug>> = HashMap::new();
-    for h in chain {
-        by_from
-            .entry(h.from_connector)
-            .or_default()
-            .push(h.to_connector);
+    for &(f, t) in hops {
+        by_from.entry(f).or_default().push(t);
     }
     let mut reached: HashSet<ConnectorSlug> = HashSet::new();
     let mut stack: Vec<ConnectorSlug> = vec![ConnectorSlug::InputTip, ConnectorSlug::InputRing];
@@ -317,18 +314,20 @@ pub fn filter_blocking(issues: &[Issue]) -> Vec<&Issue> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::presets::{ChainHop, Spillover};
+    use crate::presets::{Connection, PresetBody, SimpleHop, Spillover};
     use serde_json::json;
 
     fn good_yaml() -> Value {
         json!({
             "preset": {
                 "bank": 1, "number": 0, "name": "Test",
-                "mode": "simple",
                 "spillover": {"output_tip": "nothing", "output_ring": "nothing"},
-                "chain": [
-                    {"from_connector": "input_tip", "to_connector": "output_tip", "bypass": false}
-                ]
+                "body": {
+                    "mode": "simple",
+                    "chain": [
+                        {"from_connector": "input_tip", "to_connector": "output_tip", "bypass": false}
+                    ]
+                }
             }
         })
     }
@@ -338,20 +337,41 @@ mod tests {
             bank: 1,
             number: 0,
             name: "OK".into(),
-            mode: PresetMode::Simple,
-            chain: vec![
-                ChainHop {
-                    from_connector: ConnectorSlug::InputTip,
-                    to_connector: ConnectorSlug::ATip,
-                    bypass: false,
-                },
-                ChainHop {
-                    from_connector: ConnectorSlug::ATip,
-                    to_connector: ConnectorSlug::OutputTip,
-                    bypass: false,
-                },
-            ],
             spillover: Spillover::default(),
+            body: PresetBody::Simple {
+                chain: vec![
+                    SimpleHop {
+                        from_connector: ConnectorSlug::InputTip,
+                        to_connector: ConnectorSlug::ATip,
+                        bypass: false,
+                    },
+                    SimpleHop {
+                        from_connector: ConnectorSlug::ATip,
+                        to_connector: ConnectorSlug::OutputTip,
+                        bypass: false,
+                    },
+                ],
+            },
+        }
+    }
+
+    fn simple_preset(chain: Vec<SimpleHop>) -> Preset {
+        Preset {
+            bank: 0,
+            number: 0,
+            name: "T".into(),
+            spillover: Spillover::default(),
+            body: PresetBody::Simple { chain },
+        }
+    }
+
+    fn advanced_preset(connections: Vec<Connection>, spillover: Spillover) -> Preset {
+        Preset {
+            bank: 0,
+            number: 0,
+            name: "T".into(),
+            spillover,
+            body: PresetBody::Advanced { connections },
         }
     }
 
@@ -363,10 +383,15 @@ mod tests {
     #[test]
     fn schema_rejects_bad_connector_slug() {
         let mut doc = good_yaml();
-        doc["preset"]["chain"][0]["from_connector"] = json!("a_tipp");
+        doc["preset"]["body"]["chain"][0]["from_connector"] = json!("a_tipp");
         let issues = validate_preset_schema(&doc, None);
-        assert!(issues.iter().any(|i| i.message.contains("a_tipp")));
-        assert!(issues.iter().any(|i| i.path.contains("from_connector")));
+        // With the oneOf body discriminator, the bad slug surfaces as a
+        // failure to match either variant. The offending literal still
+        // appears in the error text — that's what users see.
+        assert!(
+            issues.iter().any(|i| i.message.contains("a_tipp")),
+            "expected 'a_tipp' in some issue message; got: {issues:?}"
+        );
     }
 
     #[test]
@@ -396,7 +421,7 @@ mod tests {
     #[test]
     fn schema_rejects_bad_mode() {
         let mut doc = good_yaml();
-        doc["preset"]["mode"] = json!("fancy");
+        doc["preset"]["body"]["mode"] = json!("fancy");
         let issues = validate_preset_schema(&doc, None);
         assert!(issues.iter().any(|i| i.message.contains("fancy")));
     }
@@ -409,101 +434,46 @@ mod tests {
 
     #[test]
     fn semantics_outputs_cannot_be_from() {
-        let p = Preset {
-            bank: 0,
-            number: 0,
-            name: "Bad".into(),
-            mode: PresetMode::Simple,
-            chain: vec![ChainHop {
-                from_connector: ConnectorSlug::OutputTip,
-                to_connector: ConnectorSlug::ATip,
-                bypass: false,
-            }],
-            spillover: Default::default(),
-        };
+        let p = simple_preset(vec![SimpleHop {
+            from_connector: ConnectorSlug::OutputTip,
+            to_connector: ConnectorSlug::ATip,
+            bypass: false,
+        }]);
         let issues = validate_preset_semantics(&p);
         assert!(issues.iter().any(|i| i.message.contains("cannot be a chain SOURCE")));
     }
 
     #[test]
     fn semantics_inputs_cannot_be_to() {
-        let p = Preset {
-            bank: 0,
-            number: 0,
-            name: "Bad".into(),
-            mode: PresetMode::Simple,
-            chain: vec![ChainHop {
-                from_connector: ConnectorSlug::ATip,
-                to_connector: ConnectorSlug::InputTip,
-                bypass: false,
-            }],
-            spillover: Default::default(),
-        };
+        let p = simple_preset(vec![SimpleHop {
+            from_connector: ConnectorSlug::ATip,
+            to_connector: ConnectorSlug::InputTip,
+            bypass: false,
+        }]);
         let issues = validate_preset_semantics(&p);
         assert!(issues.iter().any(|i| i.message.contains("cannot be a chain DESTINATION")));
     }
 
     #[test]
     fn semantics_rejects_self_loops() {
-        let p = Preset {
-            bank: 0,
-            number: 0,
-            name: "Bad".into(),
-            mode: PresetMode::Simple,
-            chain: vec![ChainHop {
-                from_connector: ConnectorSlug::ATip,
-                to_connector: ConnectorSlug::ATip,
-                bypass: false,
-            }],
-            spillover: Default::default(),
-        };
+        let p = simple_preset(vec![SimpleHop {
+            from_connector: ConnectorSlug::ATip,
+            to_connector: ConnectorSlug::ATip,
+            bypass: false,
+        }]);
         let issues = validate_preset_semantics(&p);
         assert!(issues.iter().any(|i| i.message.contains("loops back on itself")));
     }
 
     #[test]
-    fn semantics_advanced_mode_bypass_warns() {
-        let p = Preset {
-            bank: 0,
-            number: 0,
-            name: "A".into(),
-            mode: PresetMode::Advanced,
-            chain: vec![
-                ChainHop {
-                    from_connector: ConnectorSlug::InputTip,
-                    to_connector: ConnectorSlug::ATip,
-                    bypass: true,
-                },
-                ChainHop {
-                    from_connector: ConnectorSlug::ATip,
-                    to_connector: ConnectorSlug::OutputTip,
-                    bypass: false,
-                },
-            ],
-            spillover: Default::default(),
-        };
-        let issues = validate_preset_semantics(&p);
-        let warnings: Vec<&Issue> = issues
-            .iter()
-            .filter(|i| i.message.contains("ignore per-loop bypass"))
-            .collect();
-        assert!(!warnings.is_empty());
-        assert!(warnings.iter().all(|i| i.severity == Severity::Warning));
-    }
-
-    #[test]
     fn semantics_advanced_spillover_warns() {
-        let p = Preset {
-            bank: 0,
-            number: 0,
-            name: "A".into(),
-            mode: PresetMode::Advanced,
-            chain: vec![],
-            spillover: Spillover {
+        let p = advanced_preset(
+            vec![],
+            Spillover {
                 output_tip: SpilloverTarget::DTip,
                 output_ring: SpilloverTarget::Nothing,
             },
-        };
+        );
         let issues = validate_preset_semantics(&p);
         assert!(
             issues
@@ -515,43 +485,29 @@ mod tests {
 
     #[test]
     fn semantics_no_input_output_path_warns() {
-        let p = Preset {
-            bank: 0,
-            number: 0,
-            name: "Disc".into(),
-            mode: PresetMode::Simple,
-            chain: vec![ChainHop {
-                from_connector: ConnectorSlug::ATip,
-                to_connector: ConnectorSlug::BTip,
-                bypass: false,
-            }],
-            spillover: Default::default(),
-        };
+        let p = simple_preset(vec![SimpleHop {
+            from_connector: ConnectorSlug::ATip,
+            to_connector: ConnectorSlug::BTip,
+            bypass: false,
+        }]);
         let issues = validate_preset_semantics(&p);
         assert!(issues.iter().any(|i| i.message.contains("no path from an input")));
     }
 
     #[test]
     fn semantics_simple_mode_rejects_branching() {
-        let p = Preset {
-            bank: 0,
-            number: 0,
-            name: "Branch".into(),
-            mode: PresetMode::Simple,
-            chain: vec![
-                ChainHop {
-                    from_connector: ConnectorSlug::InputTip,
-                    to_connector: ConnectorSlug::OutputTip,
-                    bypass: false,
-                },
-                ChainHop {
-                    from_connector: ConnectorSlug::InputTip,
-                    to_connector: ConnectorSlug::OutputRing,
-                    bypass: false,
-                },
-            ],
-            spillover: Default::default(),
-        };
+        let p = simple_preset(vec![
+            SimpleHop {
+                from_connector: ConnectorSlug::InputTip,
+                to_connector: ConnectorSlug::OutputTip,
+                bypass: false,
+            },
+            SimpleHop {
+                from_connector: ConnectorSlug::InputTip,
+                to_connector: ConnectorSlug::OutputRing,
+                bypass: false,
+            },
+        ]);
         let issues = validate_preset_semantics(&p);
         assert!(issues.iter().any(|i| i.message.contains("branch the signal")));
         assert!(issues.iter().any(|i| i.severity == Severity::Error));
@@ -559,55 +515,42 @@ mod tests {
 
     #[test]
     fn semantics_advanced_mode_allows_branching() {
-        let p = Preset {
-            bank: 0,
-            number: 0,
-            name: "Stereo".into(),
-            mode: PresetMode::Advanced,
-            chain: vec![
-                ChainHop {
+        let p = advanced_preset(
+            vec![
+                Connection {
                     from_connector: ConnectorSlug::InputTip,
                     to_connector: ConnectorSlug::OutputTip,
-                    bypass: false,
                 },
-                ChainHop {
+                Connection {
                     from_connector: ConnectorSlug::InputTip,
                     to_connector: ConnectorSlug::OutputRing,
-                    bypass: false,
                 },
             ],
-            spillover: Default::default(),
-        };
+            Spillover::default(),
+        );
         let issues = validate_preset_semantics(&p);
         assert!(filter_blocking(&issues).is_empty(), "issues: {issues:?}");
     }
 
     #[test]
     fn semantics_duplicate_hop_warns() {
-        let p = Preset {
-            bank: 0,
-            number: 0,
-            name: "Dup".into(),
-            mode: PresetMode::Advanced,
-            chain: vec![
-                ChainHop {
+        let p = advanced_preset(
+            vec![
+                Connection {
                     from_connector: ConnectorSlug::InputTip,
                     to_connector: ConnectorSlug::ATip,
-                    bypass: false,
                 },
-                ChainHop {
+                Connection {
                     from_connector: ConnectorSlug::InputTip,
                     to_connector: ConnectorSlug::ATip,
-                    bypass: false,
                 },
-                ChainHop {
+                Connection {
                     from_connector: ConnectorSlug::ATip,
                     to_connector: ConnectorSlug::OutputTip,
-                    bypass: false,
                 },
             ],
-            spillover: Default::default(),
-        };
+            Spillover::default(),
+        );
         let issues = validate_preset_semantics(&p);
         assert!(issues.iter().any(|i| i.message.contains("duplicate hop")));
     }

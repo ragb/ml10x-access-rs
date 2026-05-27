@@ -282,7 +282,7 @@ pub fn decode_ascii_name(data: &[u8]) -> String {
         }
         &data[..end]
     };
-    // Replace any non-ASCII byte with U+FFFD, matching Python's `errors="replace"`.
+    // Replace any non-ASCII byte with U+FFFD rather than erroring.
     trimmed
         .iter()
         .map(|&b| if b.is_ascii() { b as char } else { '\u{FFFD}' })

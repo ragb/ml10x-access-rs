@@ -1,12 +1,11 @@
 //! YAML serialization for ML10X presets and controller settings.
 //!
-//! `serde_yml` doesn't preserve comments, so the original Python's
-//! round-trip-with-comments behaviour is not replicated here (this is
-//! deliberate — see the port plan). What we DO preserve:
+//! `serde_yml` doesn't preserve comments or key ordering on a load →
+//! save round-trip; we accept that and instead guarantee:
 //!
 //! - Field ordering: explicit shim structs make the on-disk YAML read
-//!   top-to-bottom under a screen reader (bank → number → name → mode →
-//!   spillover → chain).
+//!   top-to-bottom under a screen reader (bank → number → name →
+//!   spillover → body).
 //! - YAML bank field is 1..4 (matches the editor UI); the in-memory
 //!   `Preset.bank` stays 0..3 (matches the wire protocol). Translation
 //!   happens in the shim conversions.
@@ -20,13 +19,14 @@ use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 use crate::presets::{
-    ChainHop, Connector, Connectors, Controller, IncludeInTrails, Preset, PresetMode, Spillover,
+    Connection, Connector, Connectors, Controller, IncludeInTrails, Preset, PresetBody,
+    SimpleHop, Spillover,
 };
 
 pub const PRESET_SCHEMA_URL: &str =
-    "https://raw.githubusercontent.com/ragb/ml10x-access/main/src/ml10x/schema/preset.schema.json";
+    "https://raw.githubusercontent.com/ragb/ml10x-access-rs/main/schemas/preset.schema.json";
 pub const CONTROLLER_SCHEMA_URL: &str =
-    "https://raw.githubusercontent.com/ragb/ml10x-access/main/src/ml10x/schema/controller.schema.json";
+    "https://raw.githubusercontent.com/ragb/ml10x-access-rs/main/schemas/controller.schema.json";
 
 #[derive(Debug, Error)]
 pub enum YamlError {
@@ -64,11 +64,21 @@ struct PresetYaml {
     number: u8,
     name: String,
     #[serde(default)]
-    mode: PresetMode,
-    #[serde(default)]
     spillover: SpilloverYaml,
-    #[serde(default)]
-    chain: Vec<ChainHopYaml>,
+    body: PresetBodyYaml,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(tag = "mode", rename_all = "snake_case")]
+enum PresetBodyYaml {
+    Simple {
+        #[serde(default)]
+        chain: Vec<SimpleHopYaml>,
+    },
+    Advanced {
+        #[serde(default)]
+        connections: Vec<ConnectionYaml>,
+    },
 }
 
 #[derive(Debug, Default, Serialize, Deserialize)]
@@ -100,15 +110,15 @@ impl From<SpilloverYaml> for Spillover {
 
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
-struct ChainHopYaml {
+struct SimpleHopYaml {
     from_connector: crate::presets::ConnectorSlug,
     to_connector: crate::presets::ConnectorSlug,
     #[serde(default)]
     bypass: bool,
 }
 
-impl From<&ChainHop> for ChainHopYaml {
-    fn from(h: &ChainHop) -> Self {
+impl From<&SimpleHop> for SimpleHopYaml {
+    fn from(h: &SimpleHop) -> Self {
         Self {
             from_connector: h.from_connector,
             to_connector: h.to_connector,
@@ -117,9 +127,9 @@ impl From<&ChainHop> for ChainHopYaml {
     }
 }
 
-impl From<ChainHopYaml> for ChainHop {
-    fn from(h: ChainHopYaml) -> Self {
-        ChainHop {
+impl From<SimpleHopYaml> for SimpleHop {
+    fn from(h: SimpleHopYaml) -> Self {
+        SimpleHop {
             from_connector: h.from_connector,
             to_connector: h.to_connector,
             bypass: h.bypass,
@@ -127,15 +137,47 @@ impl From<ChainHopYaml> for ChainHop {
     }
 }
 
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct ConnectionYaml {
+    from_connector: crate::presets::ConnectorSlug,
+    to_connector: crate::presets::ConnectorSlug,
+}
+
+impl From<&Connection> for ConnectionYaml {
+    fn from(c: &Connection) -> Self {
+        Self {
+            from_connector: c.from_connector,
+            to_connector: c.to_connector,
+        }
+    }
+}
+
+impl From<ConnectionYaml> for Connection {
+    fn from(c: ConnectionYaml) -> Self {
+        Connection {
+            from_connector: c.from_connector,
+            to_connector: c.to_connector,
+        }
+    }
+}
+
 fn preset_to_yaml(preset: &Preset) -> PresetDoc {
+    let body = match &preset.body {
+        PresetBody::Simple { chain } => PresetBodyYaml::Simple {
+            chain: chain.iter().map(SimpleHopYaml::from).collect(),
+        },
+        PresetBody::Advanced { connections } => PresetBodyYaml::Advanced {
+            connections: connections.iter().map(ConnectionYaml::from).collect(),
+        },
+    };
     PresetDoc {
         preset: PresetYaml {
             bank: preset.bank + 1, // 0..3 internal → 1..4 in YAML
             number: preset.number,
             name: preset.name.clone(),
-            mode: preset.mode,
             spillover: preset.spillover.into(),
-            chain: preset.chain.iter().map(ChainHopYaml::from).collect(),
+            body,
         },
     }
 }
@@ -147,13 +189,20 @@ fn yaml_to_preset(doc: PresetDoc, source_for_errs: &str) -> Result<Preset, YamlE
             got: doc.preset.bank,
         });
     }
+    let body = match doc.preset.body {
+        PresetBodyYaml::Simple { chain } => PresetBody::Simple {
+            chain: chain.into_iter().map(Into::into).collect(),
+        },
+        PresetBodyYaml::Advanced { connections } => PresetBody::Advanced {
+            connections: connections.into_iter().map(Into::into).collect(),
+        },
+    };
     Ok(Preset {
         bank: doc.preset.bank - 1,
         number: doc.preset.number,
         name: doc.preset.name,
-        mode: doc.preset.mode,
         spillover: doc.preset.spillover.into(),
-        chain: doc.preset.chain.into_iter().map(Into::into).collect(),
+        body,
     })
 }
 
@@ -400,27 +449,49 @@ fn _suppress_unused() {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::presets::{ConnectorSlug, PresetMode, SpilloverTarget};
+    use crate::presets::{ConnectorSlug, SpilloverTarget};
 
     fn sample_preset() -> Preset {
         Preset {
             bank: 0, // internal 0..3
             number: 0,
             name: "Base".into(),
-            mode: PresetMode::Simple,
-            chain: vec![
-                ChainHop {
-                    from_connector: ConnectorSlug::InputTip,
-                    to_connector: ConnectorSlug::ATip,
-                    bypass: false,
-                },
-                ChainHop {
-                    from_connector: ConnectorSlug::ATip,
-                    to_connector: ConnectorSlug::OutputTip,
-                    bypass: false,
-                },
-            ],
             spillover: Spillover::default(),
+            body: PresetBody::Simple {
+                chain: vec![
+                    SimpleHop {
+                        from_connector: ConnectorSlug::InputTip,
+                        to_connector: ConnectorSlug::ATip,
+                        bypass: false,
+                    },
+                    SimpleHop {
+                        from_connector: ConnectorSlug::ATip,
+                        to_connector: ConnectorSlug::OutputTip,
+                        bypass: false,
+                    },
+                ],
+            },
+        }
+    }
+
+    fn sample_advanced_preset() -> Preset {
+        Preset {
+            bank: 0,
+            number: 1,
+            name: "Adv".into(),
+            spillover: Spillover::default(),
+            body: PresetBody::Advanced {
+                connections: vec![
+                    Connection {
+                        from_connector: ConnectorSlug::InputTip,
+                        to_connector: ConnectorSlug::OutputTip,
+                    },
+                    Connection {
+                        from_connector: ConnectorSlug::InputTip,
+                        to_connector: ConnectorSlug::OutputRing,
+                    },
+                ],
+            },
         }
     }
 
@@ -433,11 +504,28 @@ mod tests {
     #[test]
     fn preset_yaml_contains_expected_fields() {
         let yaml = preset_yaml_string(&sample_preset()).unwrap();
-        for needle in ["bank:", "number:", "name:", "mode:", "spillover:", "chain:"] {
+        for needle in ["bank:", "number:", "name:", "spillover:", "body:", "mode:", "chain:"] {
             assert!(yaml.contains(needle), "missing {needle:?} in:\n{yaml}");
         }
         // ML10X has no per-preset MIDI messages — the field must not appear.
         assert!(!yaml.contains("midi_messages"), "midi_messages leaked into YAML:\n{yaml}");
+    }
+
+    #[test]
+    fn advanced_preset_yaml_uses_connections_field() {
+        let yaml = preset_yaml_string(&sample_advanced_preset()).unwrap();
+        assert!(yaml.contains("mode: advanced"), "got: {yaml}");
+        assert!(yaml.contains("connections:"), "got: {yaml}");
+        assert!(!yaml.contains("chain:"), "advanced preset should not have a chain field: {yaml}");
+        assert!(!yaml.contains("bypass:"), "advanced preset should not have bypass: {yaml}");
+    }
+
+    #[test]
+    fn advanced_preset_yaml_round_trips() {
+        let p = sample_advanced_preset();
+        let text = preset_yaml_string(&p).unwrap();
+        let loaded = load_preset_yaml_str(&text, "<test>").unwrap();
+        assert_eq!(loaded, p);
     }
 
     #[test]
@@ -470,6 +558,9 @@ preset:
   bank: 1
   number: 0
   name: x
+  body:
+    mode: simple
+    chain: []
   bogus_field: hi
 "#;
         let err = load_preset_yaml_str(text, "<test>").unwrap_err();
@@ -481,11 +572,34 @@ preset:
 
     #[test]
     fn load_preset_yaml_rejects_bank_out_of_range() {
-        let text = "preset:\n  bank: 5\n  number: 0\n  name: x\n";
+        let text = "preset:\n  bank: 5\n  number: 0\n  name: x\n  body:\n    mode: simple\n    chain: []\n";
         let err = load_preset_yaml_str(text, "<test>").unwrap_err();
         match err {
             YamlError::BadBank { got: 5, .. } => {}
             other => panic!("expected BadBank, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn load_preset_yaml_rejects_bypass_in_advanced() {
+        // bypass is no longer a field on Connection — feeding it in
+        // advanced mode is a parse error, not a lint warning.
+        let text = r#"
+preset:
+  bank: 1
+  number: 0
+  name: x
+  body:
+    mode: advanced
+    connections:
+      - from_connector: input_tip
+        to_connector: output_tip
+        bypass: true
+"#;
+        let err = load_preset_yaml_str(text, "<test>").unwrap_err();
+        match err {
+            YamlError::Parse { .. } => {}
+            other => panic!("expected Parse for bypass-in-advanced, got {other:?}"),
         }
     }
 

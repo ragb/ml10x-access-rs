@@ -173,7 +173,7 @@ If the user hasn't specified a bank/preset, ask. Don't guess — overwriting the
 Always include the schema header at the top of new files so VS Code attaches autocomplete:
 
 ```yaml
-# yaml-language-server: $schema=https://raw.githubusercontent.com/ragb/ml10x-access/main/src/ml10x/schema/preset.schema.json
+# yaml-language-server: $schema=https://raw.githubusercontent.com/ragb/ml10x-access-rs/main/schemas/preset.schema.json
 preset:
   …
 ```

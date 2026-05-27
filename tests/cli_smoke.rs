@@ -25,13 +25,14 @@ preset:
   bank: 1
   number: 0
   name: Base
-  mode: simple
   spillover:
     output_tip: nothing
     output_ring: nothing
-  chain:
-    - { from_connector: input_tip, to_connector: a_tip, bypass: false }
-    - { from_connector: a_tip,     to_connector: output_tip, bypass: false }
+  body:
+    mode: simple
+    chain:
+      - { from_connector: input_tip, to_connector: a_tip, bypass: false }
+      - { from_connector: a_tip,     to_connector: output_tip, bypass: false }
 "#;
     let p = PathBuf::from(SAMPLE);
     std::fs::create_dir_all(p.parent().unwrap()).unwrap();

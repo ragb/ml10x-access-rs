@@ -4,7 +4,7 @@ mod common;
 
 use ml10x::decode::decode_preset;
 use ml10x::encode::encode_simple_preset;
-use ml10x::presets::ConnectorSlug;
+use ml10x::presets::{ConnectorSlug, PresetBody};
 use pretty_assertions::assert_eq;
 
 const SAVE_FIXTURE: &str = include_str!("fixtures/real-device-save-preset-0.json");
@@ -41,11 +41,16 @@ fn encode_reflects_bypass_change_byte_exact() {
     let after = common::captured(&cap, "after_bypass_toggle");
 
     let mut preset = decode_preset(&baseline, 0, 2).unwrap();
-    for hop in &mut preset.chain {
-        if hop.to_connector == ConnectorSlug::ATip {
-            hop.bypass = true;
-            break;
+    match &mut preset.body {
+        PresetBody::Simple { chain } => {
+            for hop in chain {
+                if hop.to_connector == ConnectorSlug::ATip {
+                    hop.bypass = true;
+                    break;
+                }
+            }
         }
+        PresetBody::Advanced { .. } => panic!("simple-mode bypass fixture decoded as Advanced"),
     }
     let encoded = encode_simple_preset(&preset, true).unwrap();
     assert_eq!(encoded, after);

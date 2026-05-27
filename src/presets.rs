@@ -181,13 +181,22 @@ impl ConnectorSlug {
     }
 }
 
-/// One link in a preset's signal chain.
+/// One link in a Simple-mode preset's signal chain. Carries `bypass`
+/// because Simple mode supports per-loop bypass.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub struct ChainHop {
+pub struct SimpleHop {
     pub from_connector: ConnectorSlug,
     pub to_connector: ConnectorSlug,
     #[serde(default)]
     pub bypass: bool,
+}
+
+/// One edge in an Advanced-mode preset's routing graph. No `bypass` —
+/// the v1.2 firmware ignores per-loop bypass in Advanced presets.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Connection {
+    pub from_connector: ConnectorSlug,
+    pub to_connector: ConnectorSlug,
 }
 
 /// Per-output spillover target for a preset.
@@ -208,6 +217,9 @@ impl Default for Spillover {
     }
 }
 
+/// Discriminator value used in YAML (`body.mode: simple|advanced`) and in
+/// human-readable error messages. The in-memory `Preset.body` enum is the
+/// source of truth; this is derived via [`Preset::mode`].
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum PresetMode {
@@ -215,9 +227,36 @@ pub enum PresetMode {
     Advanced,
 }
 
-impl Default for PresetMode {
+/// The mode-specific shape of a preset's routing.
+///
+/// Simple is a linear chain with per-loop bypass; Advanced is an
+/// arbitrary graph and the firmware ignores per-loop bypass. Encoding
+/// these as distinct variants makes invalid combinations unrepresentable.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "mode", rename_all = "snake_case")]
+pub enum PresetBody {
+    Simple {
+        #[serde(default)]
+        chain: Vec<SimpleHop>,
+    },
+    Advanced {
+        #[serde(default)]
+        connections: Vec<Connection>,
+    },
+}
+
+impl PresetBody {
+    pub fn mode(&self) -> PresetMode {
+        match self {
+            PresetBody::Simple { .. } => PresetMode::Simple,
+            PresetBody::Advanced { .. } => PresetMode::Advanced,
+        }
+    }
+}
+
+impl Default for PresetBody {
     fn default() -> Self {
-        PresetMode::Simple
+        PresetBody::Simple { chain: Vec::new() }
     }
 }
 
@@ -232,12 +271,14 @@ pub struct Preset {
     pub bank: u8,
     pub number: u8,
     pub name: String,
-    #[serde(default)]
-    pub mode: PresetMode,
-    #[serde(default)]
-    pub chain: Vec<ChainHop>,
-    #[serde(default)]
     pub spillover: Spillover,
+    pub body: PresetBody,
+}
+
+impl Preset {
+    pub fn mode(&self) -> PresetMode {
+        self.body.mode()
+    }
 }
 
 /// One of the 14 physical connectors on the device. Names are
@@ -369,15 +410,14 @@ mod tests {
     }
 
     #[test]
-    fn preset_default_mode_is_simple() {
+    fn preset_default_body_is_simple() {
         let p = Preset {
             bank: 1,
             number: 0,
             name: "empty".to_string(),
-            mode: PresetMode::default(),
-            chain: vec![],
             spillover: Spillover::default(),
+            body: PresetBody::default(),
         };
-        assert_eq!(p.mode, PresetMode::Simple);
+        assert_eq!(p.mode(), PresetMode::Simple);
     }
 }

@@ -10,17 +10,11 @@ use unicode_normalization::UnicodeNormalization;
 use crate::device::{
     CONNECTOR_SLUGS, DeviceProfile, ML10X, UNROUTED, segment_id, slug_to_groupnumber,
 };
-use crate::presets::{ChainHop, Controller, Preset, PresetMode, SpilloverTarget};
+use crate::presets::{Controller, Preset, PresetBody, SimpleHop, SpilloverTarget};
 use crate::sysex::{SysexError, build_header_with, encode_segment, frame_with};
 
 #[derive(Debug, Error)]
 pub enum EncodeError {
-    #[error(
-        "encode_simple_preset only handles Simple mode; got {0:?}. Advanced uses encode_advanced_preset."
-    )]
-    SimpleEncoderWrongMode(PresetMode),
-    #[error("encode_advanced_preset called on mode={0:?}")]
-    AdvancedEncoderWrongMode(PresetMode),
     #[error("Unknown connector slug {0:?}")]
     UnknownConnector(String),
     #[error("Sysex framing error: {0}")]
@@ -66,9 +60,10 @@ pub fn encode_simple_preset_with(
     preset: &Preset,
     save_to_current: bool,
 ) -> Result<Vec<u8>, EncodeError> {
-    if preset.mode != PresetMode::Simple {
-        return Err(EncodeError::SimpleEncoderWrongMode(preset.mode));
-    }
+    let chain: &[SimpleHop] = match &preset.body {
+        PresetBody::Simple { chain } => chain,
+        PresetBody::Advanced { .. } => &[],
+    };
     let p3 = if save_to_current { 0x7F } else { preset.number & 0x7F };
     let p4 = if save_to_current { 0 } else { preset.bank & 0x7F };
     let header = build_header_with(device, 6, 0, p3, p4, 0, 0, 0, 0);
@@ -77,8 +72,8 @@ pub fn encode_simple_preset_with(
 
     // Build a map from connector groupNumber -> chain hop, so we can
     // emit one segment per "FROM-able" connector.
-    let mut linked: std::collections::HashMap<u8, &ChainHop> = std::collections::HashMap::new();
-    for hop in &preset.chain {
+    let mut linked: std::collections::HashMap<u8, &SimpleHop> = std::collections::HashMap::new();
+    for hop in chain {
         let from_gn = gn_of(hop.from_connector.slug())?;
         linked.insert(from_gn, hop);
     }
@@ -90,8 +85,7 @@ pub fn encode_simple_preset_with(
     // chain order. The device's parser is order-sensitive.
     const FIXED_FROMABLE_ORDER: [u8; 12] = [4, 9, 5, 10, 6, 11, 7, 12, 8, 13, 3, 0];
 
-    let routed_gns_in_chain_order: Vec<u8> = preset
-        .chain
+    let routed_gns_in_chain_order: Vec<u8> = chain
         .iter()
         .map(|hop| gn_of(hop.from_connector.slug()))
         .collect::<Result<Vec<u8>, _>>()?;
@@ -151,18 +145,19 @@ pub fn encode_advanced_preset_with(
     preset: &Preset,
     save_to_current: bool,
 ) -> Result<Vec<u8>, EncodeError> {
-    if preset.mode != PresetMode::Advanced {
-        return Err(EncodeError::AdvancedEncoderWrongMode(preset.mode));
-    }
+    let connections = match &preset.body {
+        PresetBody::Advanced { connections } => connections.as_slice(),
+        PresetBody::Simple { .. } => &[],
+    };
     let p3 = if save_to_current { 0x7F } else { preset.number & 0x7F };
     let p4 = if save_to_current { 0 } else { preset.bank & 0x7F };
     let header = build_header_with(device, 6, 2, p3, p4, 0, 0, 0, 0);
 
     let mut segments: Vec<Vec<u8>> = Vec::new();
 
-    for hop in &preset.chain {
-        let from_gn = gn_of(hop.from_connector.slug())?;
-        let to_gn = gn_of(hop.to_connector.slug())?;
+    for conn in connections {
+        let from_gn = gn_of(conn.from_connector.slug())?;
+        let to_gn = gn_of(conn.to_connector.slug())?;
         segments.push(encode_segment(to_gn, &[from_gn]));
     }
 
@@ -195,11 +190,11 @@ pub fn encode_advanced_preset(
     encode_advanced_preset_with(ML10X, preset, save_to_current)
 }
 
-/// Dispatch to the right encoder based on `preset.mode`.
+/// Dispatch to the right encoder based on `preset.body`.
 pub fn encode_preset(preset: &Preset, save_to_current: bool) -> Result<Vec<u8>, EncodeError> {
-    match preset.mode {
-        PresetMode::Simple => encode_simple_preset(preset, save_to_current),
-        PresetMode::Advanced => encode_advanced_preset(preset, save_to_current),
+    match &preset.body {
+        PresetBody::Simple { .. } => encode_simple_preset(preset, save_to_current),
+        PresetBody::Advanced { .. } => encode_advanced_preset(preset, save_to_current),
     }
 }
 
@@ -433,18 +428,33 @@ mod tests {
     }
 
     #[test]
-    fn simple_encoder_rejects_advanced() {
-        let p = Preset {
+    fn encode_preset_dispatches_on_body() {
+        use crate::presets::{Connection, PresetBody};
+        use crate::sysex::parse_header;
+
+        let simple = Preset {
             bank: 0,
             number: 0,
-            name: "x".into(),
-            mode: PresetMode::Advanced,
-            chain: vec![],
+            name: "S".into(),
             spillover: Default::default(),
+            body: PresetBody::Simple { chain: vec![] },
         };
-        match encode_simple_preset(&p, true) {
-            Err(EncodeError::SimpleEncoderWrongMode(PresetMode::Advanced)) => {}
-            other => panic!("expected SimpleEncoderWrongMode, got {other:?}"),
-        }
+        let bytes = encode_preset(&simple, true).unwrap();
+        assert_eq!(parse_header(&bytes).unwrap().p2, 0, "simple writes p2=0");
+
+        let advanced = Preset {
+            bank: 0,
+            number: 0,
+            name: "A".into(),
+            spillover: Default::default(),
+            body: PresetBody::Advanced {
+                connections: vec![Connection {
+                    from_connector: crate::presets::ConnectorSlug::InputTip,
+                    to_connector: crate::presets::ConnectorSlug::OutputTip,
+                }],
+            },
+        };
+        let bytes = encode_preset(&advanced, true).unwrap();
+        assert_eq!(parse_header(&bytes).unwrap().p2, 2, "advanced writes p2=2");
     }
 }

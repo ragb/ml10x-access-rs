@@ -1,16 +1,13 @@
 //! Decoder pinned against the real-device captured fixtures.
 //!
-//! These mirror the high-value tests from the Python project's
-//! tests/test_decode.py and tests/test_messages.py — anything that
-//! asserts a specific property of bytes the device actually produced.
-//! Cross-validates that the Rust port behaves identically to the Python
-//! reference for the same input bytes.
+//! Anything that asserts a specific property of bytes the device
+//! actually produced lives here.
 
 mod common;
 
 use ml10x::decode::{decode_controller, decode_preset};
 use ml10x::device::{HeaderPos, InboundClass, segment_id};
-use ml10x::presets::{ConnectorSlug, PresetMode, SpilloverTarget};
+use ml10x::presets::{ConnectorSlug, PresetBody, PresetMode, SpilloverTarget};
 use ml10x::sysex::{checksum, decode_ascii_name, decode_uuid_nibbles, iter_segments, parse_header_with};
 use pretty_assertions::assert_eq;
 use serde_json::Value;
@@ -186,7 +183,7 @@ fn decode_preset_name_and_mode() {
     let number = preset_msg[HeaderPos::FunctionId3 as usize];
     let p = decode_preset(&preset_msg, bank, number).unwrap();
     assert_eq!(p.name, "Base");
-    assert_eq!(p.mode, PresetMode::Simple);
+    assert_eq!(p.mode(), PresetMode::Simple);
     assert_eq!(p.bank, 0);
     assert_eq!(p.number, 0);
     assert_eq!(p.spillover.output_tip, SpilloverTarget::Nothing);
@@ -214,18 +211,25 @@ fn decode_preset_2_bypass_toggle_is_single_hop_delta() {
     let p_before = decode_preset(&baseline, 0, 2).unwrap();
     let p_after = decode_preset(&after, 0, 2).unwrap();
 
+    let chain_of = |p: &ml10x::presets::Preset| -> Vec<ml10x::presets::SimpleHop> {
+        match &p.body {
+            PresetBody::Simple { chain } => chain.clone(),
+            PresetBody::Advanced { .. } => panic!("bypass fixture should decode as Simple"),
+        }
+    };
+    let before_chain = chain_of(&p_before);
+    let after_chain = chain_of(&p_after);
+
     // The chain shape (ignoring bypass) is identical before/after.
-    let shape =
-        |hops: &[ml10x::presets::ChainHop]| -> Vec<(ConnectorSlug, ConnectorSlug)> {
-            hops.iter().map(|h| (h.from_connector, h.to_connector)).collect()
-        };
-    assert_eq!(shape(&p_before.chain), shape(&p_after.chain));
+    let shape = |hops: &[ml10x::presets::SimpleHop]| -> Vec<(ConnectorSlug, ConnectorSlug)> {
+        hops.iter().map(|h| (h.from_connector, h.to_connector)).collect()
+    };
+    assert_eq!(shape(&before_chain), shape(&after_chain));
 
     // Exactly one hop's bypass changed, and it's the one feeding A Tip.
-    let diff: Vec<_> = p_before
-        .chain
+    let diff: Vec<_> = before_chain
         .iter()
-        .zip(p_after.chain.iter())
+        .zip(after_chain.iter())
         .filter(|(a, b)| a.bypass != b.bypass)
         .collect();
     assert_eq!(diff.len(), 1);

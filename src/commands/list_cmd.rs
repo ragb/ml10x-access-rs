@@ -65,7 +65,7 @@ fn run_directory(ctx: &mut Context, dir: PathBuf, only_bank: Option<u8>, include
             "bank": yaml_bank,
             "number": preset.number,
             "name": preset.name,
-            "mode": match preset.mode {
+            "mode": match preset.mode() {
                 crate::presets::PresetMode::Simple => "simple",
                 crate::presets::PresetMode::Advanced => "advanced",
             },

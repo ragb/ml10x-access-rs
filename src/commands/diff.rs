@@ -147,14 +147,21 @@ pub fn run(ctx: &mut Context, args: Args) -> i32 {
 }
 
 fn diff_presets(local: &Preset, remote: &Preset) -> Vec<Value> {
+    use crate::presets::PresetBody;
     let mut diffs: Vec<Value> = Vec::new();
     if local.name != remote.name {
         diffs.push(json!({"field": "name", "local": local.name, "device": remote.name}));
     }
-    if local.mode != remote.mode {
-        let l = match local.mode { crate::presets::PresetMode::Simple => "simple", _ => "advanced" };
-        let r = match remote.mode { crate::presets::PresetMode::Simple => "simple", _ => "advanced" };
-        diffs.push(json!({"field": "mode", "local": l, "device": r}));
+    let mode_label = |m: crate::presets::PresetMode| match m {
+        crate::presets::PresetMode::Simple => "simple",
+        crate::presets::PresetMode::Advanced => "advanced",
+    };
+    if local.mode() != remote.mode() {
+        diffs.push(json!({
+            "field": "mode",
+            "local": mode_label(local.mode()),
+            "device": mode_label(remote.mode()),
+        }));
     }
     if local.spillover.output_tip != remote.spillover.output_tip {
         diffs.push(json!({
@@ -170,20 +177,53 @@ fn diff_presets(local: &Preset, remote: &Preset) -> Vec<Value> {
             "device": remote.spillover.output_ring.slug(),
         }));
     }
-    fn normalized(p: &Preset) -> Vec<(String, String, bool)> {
-        let mut v: Vec<(String, String, bool)> = p
-            .chain
-            .iter()
-            .map(|h| (h.from_connector.slug().to_string(), h.to_connector.slug().to_string(), h.bypass))
-            .collect();
-        v.sort();
-        v
+    fn hop_tuples(body: &PresetBody) -> Vec<(String, String, bool)> {
+        match body {
+            PresetBody::Simple { chain } => chain
+                .iter()
+                .map(|h| {
+                    (
+                        h.from_connector.slug().to_string(),
+                        h.to_connector.slug().to_string(),
+                        h.bypass,
+                    )
+                })
+                .collect(),
+            PresetBody::Advanced { connections } => connections
+                .iter()
+                .map(|c| {
+                    (
+                        c.from_connector.slug().to_string(),
+                        c.to_connector.slug().to_string(),
+                        false,
+                    )
+                })
+                .collect(),
+        }
     }
-    if normalized(local) != normalized(remote) {
+    let mut local_hops = hop_tuples(&local.body);
+    let mut remote_hops = hop_tuples(&remote.body);
+    let mut sorted_local = local_hops.clone();
+    let mut sorted_remote = remote_hops.clone();
+    sorted_local.sort();
+    sorted_remote.sort();
+    if sorted_local != sorted_remote {
+        let (field, render): (&str, fn(&(String, String, bool)) -> Value) = match &local.body {
+            PresetBody::Simple { .. } => (
+                "chain",
+                |h| json!([h.0, h.1, h.2]),
+            ),
+            PresetBody::Advanced { .. } => (
+                "connections",
+                |h| json!([h.0, h.1]),
+            ),
+        };
+        // Suppress the unused-write lints if both are empty.
+        let _ = (&mut local_hops, &mut remote_hops);
         diffs.push(json!({
-            "field": "chain",
-            "local": local.chain.iter().map(|h| json!([h.from_connector.slug(), h.to_connector.slug(), h.bypass])).collect::<Vec<_>>(),
-            "device": remote.chain.iter().map(|h| json!([h.from_connector.slug(), h.to_connector.slug(), h.bypass])).collect::<Vec<_>>(),
+            "field": field,
+            "local": local_hops.iter().map(render).collect::<Vec<_>>(),
+            "device": remote_hops.iter().map(render).collect::<Vec<_>>(),
         }));
     }
     diffs

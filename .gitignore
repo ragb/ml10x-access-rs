@@ -17,6 +17,8 @@ Cargo.lock.bak
 # by convention; `*.local.yaml` is the same intent at file granularity.
 /presets/
 /hw-test/
+/output/
+/controller.yaml
 *.local.yaml
 
 # MIDI captures collected during reverse-engineering (raw editor traffic,

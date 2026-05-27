@@ -12,8 +12,8 @@ use crate::device::{
     CONNECTOR_SLUGS, HeaderPos, UNROUTED, groupnumber_to_slug, segment_id,
 };
 use crate::presets::{
-    ChainHop, Connector, Connectors, ConnectorSlug, Controller, IncludeInTrails, Preset,
-    PresetMode, Spillover, SpilloverTarget,
+    Connection, Connector, Connectors, ConnectorSlug, Controller, IncludeInTrails, Preset,
+    PresetBody, SimpleHop, Spillover, SpilloverTarget,
 };
 use crate::sysex::{SysexError, decode_ascii_name, iter_segments};
 
@@ -90,12 +90,12 @@ pub fn decode_preset(message: &[u8], bank: u8, number: u8) -> Result<Preset, Dec
         output_ring: decode_spillover(ring_seg.map(|v| v.as_slice()).unwrap_or(&[])),
     };
 
-    let mut hops: Vec<ChainHop> = Vec::new();
-    if advanced_flag {
+    let body = if advanced_flag {
         // Advanced: 1-byte segments at ids 0..13.
         // id = target gn, data[0] = source gn.
         // The 3-byte segments at ids 48..63 are the matrixArray which we ignore.
         // Walk segments in id order for deterministic output.
+        let mut connections: Vec<Connection> = Vec::new();
         let mut keys: Vec<u8> = segments.keys().copied().collect();
         keys.sort();
         for seg_id in keys {
@@ -108,20 +108,24 @@ pub fn decode_preset(message: &[u8], bank: u8, number: u8) -> Result<Preset, Dec
             }
             let target_gn = seg_id;
             let source_gn = data[0];
-            let from_slug = groupnumber_to_slug_checked(source_gn);
-            let to_slug = groupnumber_to_slug_checked(target_gn);
-            if let (Some(f), Some(t)) = (from_slug, to_slug) {
-                if let (Some(fc), Some(tc)) = (ConnectorSlug::from_slug(f), ConnectorSlug::from_slug(t)) {
-                    hops.push(ChainHop {
-                        from_connector: fc,
-                        to_connector: tc,
-                        bypass: false,
-                    });
-                }
+            if let (Some(fc), Some(tc)) = (connector_from_gn(source_gn), connector_from_gn(target_gn)) {
+                connections.push(Connection {
+                    from_connector: fc,
+                    to_connector: tc,
+                });
             }
         }
+        let order = hop_order(
+            &connections
+                .iter()
+                .map(|c| (c.from_connector, c.to_connector))
+                .collect::<Vec<_>>(),
+        );
+        let ordered: Vec<Connection> = order.into_iter().map(|i| connections[i].clone()).collect();
+        PresetBody::Advanced { connections: ordered }
     } else {
         // Simple / READ form: 2- or 3-byte segments at ids 0..13.
+        let mut chain: Vec<SimpleHop> = Vec::new();
         let mut keys: Vec<u8> = segments.keys().copied().collect();
         keys.sort();
         for seg_id in keys {
@@ -138,34 +142,36 @@ pub fn decode_preset(message: &[u8], bank: u8, number: u8) -> Result<Preset, Dec
             if to_gn == UNROUTED {
                 continue;
             }
-            let from_slug = groupnumber_to_slug_checked(from_gn);
-            let to_slug = groupnumber_to_slug_checked(to_gn);
-            if let (Some(f), Some(t)) = (from_slug, to_slug) {
-                if let (Some(fc), Some(tc)) = (ConnectorSlug::from_slug(f), ConnectorSlug::from_slug(t)) {
-                    hops.push(ChainHop {
-                        from_connector: fc,
-                        to_connector: tc,
-                        bypass: bypass_flag != 0,
-                    });
-                }
+            if let (Some(fc), Some(tc)) = (connector_from_gn(from_gn), connector_from_gn(to_gn)) {
+                chain.push(SimpleHop {
+                    from_connector: fc,
+                    to_connector: tc,
+                    bypass: bypass_flag != 0,
+                });
             }
         }
-    }
-
-    let chain = ordered_chain(hops);
+        let order = hop_order(
+            &chain
+                .iter()
+                .map(|h| (h.from_connector, h.to_connector))
+                .collect::<Vec<_>>(),
+        );
+        let ordered: Vec<SimpleHop> = order.into_iter().map(|i| chain[i].clone()).collect();
+        PresetBody::Simple { chain: ordered }
+    };
 
     Ok(Preset {
         bank,
         number,
         name,
-        mode: if advanced_flag {
-            PresetMode::Advanced
-        } else {
-            PresetMode::Simple
-        },
-        chain,
         spillover,
+        body,
     })
+}
+
+fn connector_from_gn(gn: u8) -> Option<ConnectorSlug> {
+    let slug = groupnumber_to_slug_checked(gn)?;
+    ConnectorSlug::from_slug(slug)
 }
 
 fn groupnumber_to_slug_checked(gn: u8) -> Option<&'static str> {
@@ -175,49 +181,49 @@ fn groupnumber_to_slug_checked(gn: u8) -> Option<&'static str> {
     Some(groupnumber_to_slug(gn))
 }
 
-/// Reorder hops so reading top-to-bottom follows signal flow.
+/// Compute a permutation of hop indices so reading top-to-bottom follows
+/// signal flow from inputs through the device.
 ///
-/// A single connector can fan out to multiple destinations (e.g. mono input
-/// splitting to both sides of a stereo loop), so the by-source index is a
-/// list per node. We walk from the input roots emitting hops we haven't
-/// visited yet; any leftover hops trail at the end. Per-hop identity is
-/// tracked by stable index so duplicates and fan-outs are preserved.
-fn ordered_chain(hops: Vec<ChainHop>) -> Vec<ChainHop> {
+/// A single connector can fan out to multiple destinations (e.g. mono
+/// input splitting to both sides of a stereo loop), so the by-source
+/// index is a list per node. We walk from the input roots emitting
+/// indices we haven't visited yet; any leftover indices trail at the
+/// end. Operates on (from, to) tuples so it works for both Simple
+/// SimpleHop and Advanced Connection lists.
+fn hop_order(hops: &[(ConnectorSlug, ConnectorSlug)]) -> Vec<usize> {
     if hops.is_empty() {
-        return hops;
+        return Vec::new();
     }
-
     let mut by_from: HashMap<ConnectorSlug, Vec<usize>> = HashMap::new();
-    for (i, h) in hops.iter().enumerate() {
-        by_from.entry(h.from_connector).or_default().push(i);
+    for (i, &(f, _)) in hops.iter().enumerate() {
+        by_from.entry(f).or_default().push(i);
     }
-
     let mut visited: HashSet<usize> = HashSet::new();
-    let mut ordered: Vec<ChainHop> = Vec::with_capacity(hops.len());
+    let mut ordered: Vec<usize> = Vec::with_capacity(hops.len());
 
     fn walk(
         node: ConnectorSlug,
-        hops: &[ChainHop],
+        hops: &[(ConnectorSlug, ConnectorSlug)],
         by_from: &HashMap<ConnectorSlug, Vec<usize>>,
         visited: &mut HashSet<usize>,
-        ordered: &mut Vec<ChainHop>,
+        ordered: &mut Vec<usize>,
     ) {
         if let Some(idxs) = by_from.get(&node) {
             for &i in idxs {
                 if visited.insert(i) {
-                    ordered.push(hops[i].clone());
-                    walk(hops[i].to_connector, hops, by_from, visited, ordered);
+                    ordered.push(i);
+                    walk(hops[i].1, hops, by_from, visited, ordered);
                 }
             }
         }
     }
 
-    walk(ConnectorSlug::InputTip, &hops, &by_from, &mut visited, &mut ordered);
-    walk(ConnectorSlug::InputRing, &hops, &by_from, &mut visited, &mut ordered);
+    walk(ConnectorSlug::InputTip, hops, &by_from, &mut visited, &mut ordered);
+    walk(ConnectorSlug::InputRing, hops, &by_from, &mut visited, &mut ordered);
 
-    for (i, h) in hops.iter().enumerate() {
+    for i in 0..hops.len() {
         if !visited.contains(&i) {
-            ordered.push(h.clone());
+            ordered.push(i);
         }
     }
     ordered

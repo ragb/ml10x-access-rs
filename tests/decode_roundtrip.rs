@@ -4,7 +4,7 @@ mod common;
 
 use ml10x::decode::decode_preset;
 use ml10x::device::{ML10X, segment_id, slug_to_groupnumber};
-use ml10x::presets::{ConnectorSlug, PresetMode};
+use ml10x::presets::{ConnectorSlug, PresetBody, PresetMode};
 use ml10x::sysex::{build_header, encode_segment, frame};
 use std::collections::HashSet;
 
@@ -36,7 +36,11 @@ fn advanced_read_preserves_multi_output_branches() {
     let msg = frame(&header, &segments).unwrap();
 
     let p = decode_preset(&msg, 0, 0).unwrap();
-    assert_eq!(p.mode, PresetMode::Advanced);
+    assert_eq!(p.mode(), PresetMode::Advanced);
+    let connections = match &p.body {
+        PresetBody::Advanced { connections } => connections,
+        PresetBody::Simple { .. } => panic!("expected Advanced body, got Simple"),
+    };
     let expected: HashSet<(ConnectorSlug, ConnectorSlug)> = hops
         .iter()
         .map(|(f, t)| {
@@ -46,10 +50,9 @@ fn advanced_read_preserves_multi_output_branches() {
             )
         })
         .collect();
-    let got: HashSet<(ConnectorSlug, ConnectorSlug)> = p
-        .chain
+    let got: HashSet<(ConnectorSlug, ConnectorSlug)> = connections
         .iter()
-        .map(|h| (h.from_connector, h.to_connector))
+        .map(|c| (c.from_connector, c.to_connector))
         .collect();
     assert_eq!(got, expected);
 

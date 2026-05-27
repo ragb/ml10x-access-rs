@@ -1,3 +1,4 @@
+use std::collections::BTreeSet;
 use std::path::PathBuf;
 use std::time::{Duration, Instant};
 
@@ -101,9 +102,8 @@ pub fn run(ctx: &mut Context, args: Args) -> i32 {
         None,
     );
 
-    let mut presets_written: u32 = 0;
     let mut controller_written = false;
-    let mut written_paths: Vec<String> = Vec::new();
+    let mut written_paths: BTreeSet<String> = BTreeSet::new();
 
     for msg in &received {
         if msg.len() < 16 {
@@ -121,9 +121,8 @@ pub fn run(ctx: &mut Context, args: Args) -> i32 {
                         ctx.out.warn(&format!("  could not write {}: {e}", path.display()), None);
                         continue;
                     }
-                    presets_written += 1;
                     let rel = path.strip_prefix(&args.out_dir).unwrap_or(&path).display().to_string();
-                    written_paths.push(rel.clone());
+                    written_paths.insert(rel.clone());
                     ctx.out.detail(&format!("  wrote {} ({:?}).", rel, p.name), None);
                 }
                 Err(e) => {
@@ -161,13 +160,16 @@ pub fn run(ctx: &mut Context, args: Args) -> i32 {
         }
     }
 
-    if presets_written > 0 || controller_written {
+    if !args.all_presets && (!written_paths.is_empty() || controller_written) {
         let part = if controller_written {
             "controller written"
         } else {
             "no controller"
         };
-        ctx.out.info(&format!("Initial dump: {presets_written} preset(s), {part}."), None);
+        ctx.out.info(
+            &format!("Initial dump: {} preset(s), {part}.", written_paths.len()),
+            None,
+        );
     }
 
     let mut skipped: Vec<(u8, u8)> = Vec::new();
@@ -222,9 +224,8 @@ pub fn run(ctx: &mut Context, args: Args) -> i32 {
                             if let Ok(p) = decode_preset(&reply, bank, preset_num) {
                                 let path = args.out_dir.join(format!("bank-{}", bank + 1)).join(format!("preset-{:03}.yaml", preset_num));
                                 if dump_preset_yaml(&p, &path).is_ok() {
-                                    presets_written += 1;
                                     let rel = path.strip_prefix(&args.out_dir).unwrap_or(&path).display().to_string();
-                                    written_paths.push(rel);
+                                    written_paths.insert(rel);
                                     got = true;
                                     break;
                                 }
@@ -240,7 +241,7 @@ pub fn run(ctx: &mut Context, args: Args) -> i32 {
                 }
             }
             ctx.out.info(
-                &format!("Bank {} done: {presets_written} written so far.", bank + 1),
+                &format!("Bank {} done: {} written so far.", bank + 1, written_paths.len()),
                 None,
             );
         }
@@ -251,6 +252,7 @@ pub fn run(ctx: &mut Context, args: Args) -> i32 {
     } else {
         format!(" ({} skipped)", skipped.len())
     };
+    let presets_written = written_paths.len();
     let summary = format!(
         "Wrote {presets_written} preset(s) + {} under {}.{}",
         if controller_written { "1 controller" } else { "no controller" },
