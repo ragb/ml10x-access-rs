@@ -37,12 +37,18 @@ pub enum MidiError {
         needle: String,
         matches: String,
     },
-    #[error("Could not open {direction} port {name:?}: {source}")]
+    // `source` is a String rather than `Box<dyn Error + Send + Sync>`
+    // because midir's ALSA backend on Linux puts `Cell<bool>` inside its
+    // `ConnectError<MidiOutput>`, which makes it `!Sync` and breaks the
+    // bound. WinMM and CoreMIDI backends are fine — but we want one type
+    // for all platforms.
+    #[error("Could not open {direction} port {name:?}: {reason}")]
     Open {
         direction: &'static str,
         name: String,
-        #[source]
-        source: Box<dyn std::error::Error + Send + Sync>,
+        // Named `reason`, not `source`, because thiserror would otherwise
+        // treat it as a `#[source]` and require `Error`/`Sized` on it.
+        reason: String,
     },
     #[error("send_sysex: message must be a complete SysEx (F0 ... F7)")]
     BadSysExFrame,
@@ -237,7 +243,7 @@ impl MidiIo {
             .map_err(|e| MidiError::Open {
                 direction: "input",
                 name: in_info.name.clone(),
-                source: Box::new(e),
+                reason: e.to_string(),
             })?;
 
         let out_conn = midi_out
@@ -245,7 +251,7 @@ impl MidiIo {
             .map_err(|e| MidiError::Open {
                 direction: "output",
                 name: out_info.name.clone(),
-                source: Box::new(e),
+                reason: e.to_string(),
             })?;
 
         Ok(Self {
