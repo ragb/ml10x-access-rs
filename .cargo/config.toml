@@ -1,0 +1,6 @@
+# getrandom v0.3+ refuses to compile for wasm32-unknown-unknown unless one
+# of its backends is explicitly selected. We pull it in transitively via
+# `jsonschema` (uuid feature). The `wasm_js` backend uses the Web Crypto API,
+# which is available in every browser that runs the editor.
+[target.wasm32-unknown-unknown]
+rustflags = ['--cfg', 'getrandom_backend="wasm_js"']

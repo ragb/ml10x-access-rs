@@ -1,0 +1,73 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+env:
+  CARGO_TERM_COLOR: always
+  RUSTFLAGS: -D warnings
+
+jobs:
+  native:
+    name: native — fmt + test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt
+
+      # midir 0.10 binds to ALSA on Linux. The runner doesn't ship the dev
+      # headers by default.
+      - name: Install ALSA dev headers
+        run: sudo apt-get update && sudo apt-get install -y libasound2-dev
+
+      - name: Cache cargo registry + target
+        uses: Swatinem/rust-cache@v2
+
+      - name: cargo fmt --check
+        run: cargo fmt --all -- --check
+
+      - name: cargo test --workspace
+        # No --workspace flag for the wasm crate here — it's tested in the
+        # `wasm` job. `default-members` in the root Cargo.toml limits this
+        # to ml10x-core + ml10x.
+        run: cargo test --locked
+
+  wasm:
+    name: wasm32 — test + build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain (wasm32 target)
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+
+      - name: Cache cargo registry + target
+        uses: Swatinem/rust-cache@v2
+        with:
+          key: wasm
+
+      - name: Install wasm-pack
+        uses: jetli/wasm-pack-action@v0.4.0
+        with:
+          version: latest
+
+      - name: wasm-pack test (node)
+        run: wasm-pack test --node crates/ml10x-wasm
+
+      - name: wasm-pack build (web, release)
+        run: wasm-pack build --release --target web --out-dir pkg crates/ml10x-wasm
+
+      - name: Upload pkg/ as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ml10x-wasm-pkg
+          path: crates/ml10x-wasm/pkg/
+          if-no-files-found: error

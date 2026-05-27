@@ -1,0 +1,30 @@
+[package]
+name = "ml10x-core"
+description = "ML10X codec: SysEx framing, preset/controller encode/decode, validation"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[lib]
+path = "src/lib.rs"
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+serde_yml = { workspace = true }
+thiserror = { workspace = true }
+unicode-normalization = { workspace = true }
+jsonschema = { workspace = true }
+log = { workspace = true }
+# Optional: when enabled, deriveable TypeScript bindings for every public
+# boundary type. The wasm crate flips this on; the CLI doesn't.
+tsify-next = { workspace = true, optional = true }
+wasm-bindgen = { workspace = true, optional = true }
+
+[features]
+default = []
+tsify = ["dep:tsify-next", "dep:wasm-bindgen"]
+
+[dev-dependencies]
+pretty_assertions = { workspace = true }

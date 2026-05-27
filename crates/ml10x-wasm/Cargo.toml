@@ -1,0 +1,31 @@
+[package]
+name = "ml10x-wasm"
+description = "ML10X codec for the browser — wasm-bindgen wrappers around ml10x-core"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+path = "src/lib.rs"
+
+[dependencies]
+ml10x-core = { path = "../ml10x-core", features = ["tsify"] }
+serde = { workspace = true }
+serde_json = { workspace = true }
+tsify-next = { workspace = true }
+wasm-bindgen = { workspace = true }
+serde-wasm-bindgen = "0.6"
+js-sys = "0.3"
+console_error_panic_hook = { version = "0.1", optional = true }
+# Transitively pulled in by jsonschema (uuid feature). On wasm32-unknown-unknown
+# we have to enable the wasm_js backend explicitly + match it with the cfg
+# flag in .cargo/config.toml.
+getrandom = { version = "0.3", features = ["wasm_js"] }
+
+[features]
+default = ["console_error_panic_hook"]
+
+[dev-dependencies]
+wasm-bindgen-test = "0.3"
