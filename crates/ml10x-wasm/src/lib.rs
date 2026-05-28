@@ -155,6 +155,29 @@ pub fn connector_slugs() -> Vec<String> {
     CONNECTOR_SLUGS.iter().map(|s| s.to_string()).collect()
 }
 
+// ─────────────────────────── factories ───────────────────────────────────
+
+/// A blank preset at the given slot. Body is Simple with an empty chain;
+/// spillover is `nothing` on both outputs. The editor uses this as a
+/// starting point in offline mode or for a "new preset" action.
+#[wasm_bindgen(js_name = newEmptyPreset)]
+pub fn new_empty_preset(bank: u8, number: u8, name: String) -> Result<Preset, JsValue> {
+    if bank > 3 {
+        return Err(js_err("bank must be 0..=3"));
+    }
+    if number > 127 {
+        return Err(js_err("number must be 0..=127"));
+    }
+    Ok(Preset::new_empty(bank, number, name))
+}
+
+/// A blank Controller — all defaults. UUID is empty; the editor should
+/// avoid trying to write the UUID anyway (it's read-only on the device).
+#[wasm_bindgen(js_name = newEmptyController)]
+pub fn new_empty_controller() -> Controller {
+    Controller::default()
+}
+
 #[wasm_bindgen(js_name = presetSchemaUrl)]
 pub fn preset_schema_url() -> String {
     yaml::PRESET_SCHEMA_URL.to_string()

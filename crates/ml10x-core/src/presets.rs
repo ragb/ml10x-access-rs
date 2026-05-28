@@ -300,6 +300,20 @@ impl Preset {
     pub fn mode(&self) -> PresetMode {
         self.body.mode()
     }
+
+    /// A blank preset at the given slot, with an empty Simple chain and no
+    /// spillover. Useful as a starting point for offline editing or "new
+    /// preset" actions in the editor. The name is truncated to the 16-char
+    /// limit enforced elsewhere (validation will still flag a too-long input).
+    pub fn new_empty(bank: u8, number: u8, name: impl Into<String>) -> Self {
+        Self {
+            bank,
+            number,
+            name: name.into(),
+            spillover: Spillover::default(),
+            body: PresetBody::default(),
+        }
+    }
 }
 
 /// One of the 14 physical connectors on the device. Names are
