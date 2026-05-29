@@ -270,4 +270,6 @@ See `docs/sysex.md` for the wire format. In brief:
 
 ## License
 
-GPL-3.0-or-later (inherited from upstream `morningstarmidi`, GPLv3).
+MIT — see [LICENSE](LICENSE). The codec was written from scratch in Rust;
+`guyburton/morningstarmidi` (GPLv3) was studied as a reference for the
+protocol and the YAML-over-SysEx pattern, but no code was copied.
