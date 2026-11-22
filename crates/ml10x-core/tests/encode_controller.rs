@@ -19,8 +19,8 @@ fn header_matches_editor_format() {
     assert_eq!(*msg.last().unwrap(), 0xF7);
     assert_eq!(msg[6], 6); // P1
     assert_eq!(msg[7], 1); // P2
-    for i in 8..14 {
-        assert_eq!(msg[i], 0, "header byte {i} should be 0 (got {})", msg[i]);
+    for (i, &b) in msg.iter().enumerate().take(14).skip(8) {
+        assert_eq!(b, 0, "header byte {i} should be 0 (got {b})");
     }
 }
 

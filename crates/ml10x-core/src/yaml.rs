@@ -1,6 +1,6 @@
 //! YAML codec (string-only) for ML10X presets and controller settings.
 //!
-//! `serde_yml` doesn't preserve comments or key ordering on a load → save
+//! `serde_norway` doesn't preserve comments or key ordering on a load → save
 //! round-trip; we accept that and instead guarantee:
 //!
 //! - Field ordering: explicit shim structs make the on-disk YAML read
@@ -37,10 +37,10 @@ pub enum YamlError {
     Parse {
         source_label: String,
         #[source]
-        source: serde_yml::Error,
+        source: serde_norway::Error,
     },
     #[error("YAML serialization error: {0}")]
-    Serialize(#[from] serde_yml::Error),
+    Serialize(#[from] serde_norway::Error),
     #[error("YAML at {source_label}: preset.bank must be 1..4 (got {got})")]
     BadBank { source_label: String, got: u8 },
 }
@@ -202,11 +202,11 @@ fn yaml_to_preset(doc: PresetDoc, source_label: &str) -> Result<Preset, YamlErro
 }
 
 pub fn preset_to_yaml_string(preset: &Preset) -> Result<String, YamlError> {
-    Ok(serde_yml::to_string(&preset_to_yaml(preset))?)
+    Ok(serde_norway::to_string(&preset_to_yaml(preset))?)
 }
 
 pub fn preset_from_yaml_str(text: &str, source_label: &str) -> Result<Preset, YamlError> {
-    let doc: PresetDoc = serde_yml::from_str(text).map_err(|e| YamlError::Parse {
+    let doc: PresetDoc = serde_norway::from_str(text).map_err(|e| YamlError::Parse {
         source_label: source_label.to_string(),
         source: e,
     })?;
@@ -364,11 +364,11 @@ fn controller_to_yaml(controller: &Controller) -> ControllerDoc {
 }
 
 pub fn controller_to_yaml_string(controller: &Controller) -> Result<String, YamlError> {
-    Ok(serde_yml::to_string(&controller_to_yaml(controller))?)
+    Ok(serde_norway::to_string(&controller_to_yaml(controller))?)
 }
 
 pub fn controller_from_yaml_str(text: &str, source_label: &str) -> Result<Controller, YamlError> {
-    let doc: ControllerDoc = serde_yml::from_str(text).map_err(|e| YamlError::Parse {
+    let doc: ControllerDoc = serde_norway::from_str(text).map_err(|e| YamlError::Parse {
         source_label: source_label.to_string(),
         source: e,
     })?;

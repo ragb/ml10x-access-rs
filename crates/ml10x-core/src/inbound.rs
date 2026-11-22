@@ -30,7 +30,7 @@ use crate::presets::{Controller, Preset};
 use crate::sysex::{SysexError, decode_uuid_nibbles, iter_segments};
 
 #[cfg(feature = "tsify")]
-use tsify_next::Tsify;
+use tsify::Tsify;
 
 /// Tagged enum describing what the device just sent.
 ///
@@ -41,6 +41,9 @@ use tsify_next::Tsify;
 #[cfg_attr(feature = "tsify", derive(Tsify))]
 #[cfg_attr(feature = "tsify", tsify(into_wasm_abi, from_wasm_abi))]
 #[serde(tag = "kind", rename_all = "snake_case")]
+// Short-lived decode result handed straight to the caller (or across the wasm
+// boundary by value); boxing `Preset` would buy nothing.
+#[allow(clippy::large_enum_variant)]
 pub enum InboundMessage {
     /// A preset's contents. `bank` and `number` are pulled from the header
     /// (P4 / P3 respectively) — these are the device's idea of which slot

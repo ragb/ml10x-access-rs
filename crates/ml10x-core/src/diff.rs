@@ -15,7 +15,7 @@ use serde_json::{Value, json};
 use crate::presets::{Preset, PresetBody, PresetMode};
 
 #[cfg(feature = "tsify")]
-use tsify_next::Tsify;
+use tsify::Tsify;
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[cfg_attr(feature = "tsify", derive(Tsify))]
@@ -75,7 +75,7 @@ pub fn diff_presets(local: &Preset, device: &Preset) -> Vec<Difference> {
     sorted_local.sort();
     sorted_device.sort();
     if sorted_local != sorted_device {
-        let (field, render): (&str, fn(&(String, String, bool)) -> Value) = match &local.body {
+        let (field, render): (&str, fn(&Hop) -> Value) = match &local.body {
             PresetBody::Simple { .. } => ("chain", |h| json!([h.0, h.1, h.2])),
             PresetBody::Advanced { .. } => ("connections", |h| json!([h.0, h.1])),
         };
@@ -89,7 +89,10 @@ pub fn diff_presets(local: &Preset, device: &Preset) -> Vec<Difference> {
     diffs
 }
 
-fn hop_tuples(body: &PresetBody) -> Vec<(String, String, bool)> {
+/// `(from, to, bypass)` for one hop; advanced connections have no bypass.
+type Hop = (String, String, bool);
+
+fn hop_tuples(body: &PresetBody) -> Vec<Hop> {
     match body {
         PresetBody::Simple { chain } => chain
             .iter()

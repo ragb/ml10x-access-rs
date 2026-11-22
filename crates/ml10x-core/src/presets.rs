@@ -11,7 +11,7 @@
 use serde::{Deserialize, Serialize};
 
 #[cfg(feature = "tsify")]
-use tsify_next::Tsify;
+use tsify::Tsify;
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[cfg_attr(feature = "tsify", derive(Tsify))]
@@ -26,11 +26,12 @@ pub enum LoopState {
 /// `j2` dropdown does NOT include `last_connected` for the ML10X — that's
 /// an MC-series feature. The two outputs aren't valid targets (you can't
 /// spill audio back into an output).
-#[derive(Copy, Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Copy, Clone, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
 #[cfg_attr(feature = "tsify", derive(Tsify))]
 #[cfg_attr(feature = "tsify", tsify(into_wasm_abi, from_wasm_abi))]
 #[serde(rename_all = "snake_case")]
 pub enum SpilloverTarget {
+    #[default]
     Nothing,
     InputTip,
     InputRing,
@@ -44,12 +45,6 @@ pub enum SpilloverTarget {
     DRing,
     ETip,
     ERing,
-}
-
-impl Default for SpilloverTarget {
-    fn default() -> Self {
-        SpilloverTarget::Nothing
-    }
 }
 
 impl SpilloverTarget {

@@ -1,7 +1,7 @@
 //! `wasm-bindgen` wrappers around `ml10x-core`.
 //!
 //! Exposes the codec — byte builders, byte parsers, YAML, validation,
-//! diff — to JavaScript with real TypeScript types (via `tsify-next`)
+//! diff — to JavaScript with real TypeScript types (via `tsify`)
 //! rather than `any`. The browser-side editor owns the MIDI transport via
 //! the Web MIDI API; this crate is purely a codec.
 

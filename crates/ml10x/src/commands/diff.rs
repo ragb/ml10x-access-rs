@@ -2,7 +2,7 @@ use std::path::PathBuf;
 use std::time::Duration;
 
 use serde_json::{Value, json};
-use serde_yml::from_str as yaml_from_str;
+use serde_norway::from_str as yaml_from_str;
 
 use crate::commands::{Context, helpers};
 use crate::encode::encode_select_bank;

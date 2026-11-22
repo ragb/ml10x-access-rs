@@ -12,14 +12,14 @@
 use std::collections::{HashMap, HashSet};
 use std::sync::OnceLock;
 
-use jsonschema::{Draft, JSONSchema};
+use jsonschema::{Draft, Validator};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 use crate::presets::{ConnectorSlug, Preset, PresetBody, PresetMode, SpilloverTarget};
 
 #[cfg(feature = "tsify")]
-use tsify_next::Tsify;
+use tsify::Tsify;
 
 const PRESET_SCHEMA_SRC: &str = include_str!("../../../schemas/preset.schema.json");
 const CONTROLLER_SCHEMA_SRC: &str = include_str!("../../../schemas/controller.schema.json");
@@ -92,7 +92,7 @@ pub fn validate_preset_full(preset: &Preset) -> ValidationReport {
 
     let mut errors = Vec::new();
     let mut warnings = Vec::new();
-    for i in schema_issues.into_iter().chain(sem_issues.into_iter()) {
+    for i in schema_issues.into_iter().chain(sem_issues) {
         match i.severity {
             Severity::Error => errors.push(i),
             Severity::Warning | Severity::Info => warnings.push(i),
@@ -101,30 +101,30 @@ pub fn validate_preset_full(preset: &Preset) -> ValidationReport {
     ValidationReport { errors, warnings }
 }
 
-fn preset_schema() -> &'static JSONSchema {
-    static SCHEMA: OnceLock<JSONSchema> = OnceLock::new();
+fn preset_schema() -> &'static Validator {
+    static SCHEMA: OnceLock<Validator> = OnceLock::new();
     SCHEMA.get_or_init(|| {
         let v: Value = serde_json::from_str(PRESET_SCHEMA_SRC).expect("preset.schema.json parses");
-        JSONSchema::options()
+        jsonschema::options()
             .with_draft(Draft::Draft202012)
-            .compile(&v)
+            .build(&v)
             .expect("preset.schema.json compiles")
     })
 }
 
-fn controller_schema() -> &'static JSONSchema {
-    static SCHEMA: OnceLock<JSONSchema> = OnceLock::new();
+fn controller_schema() -> &'static Validator {
+    static SCHEMA: OnceLock<Validator> = OnceLock::new();
     SCHEMA.get_or_init(|| {
         let v: Value =
             serde_json::from_str(CONTROLLER_SCHEMA_SRC).expect("controller.schema.json parses");
-        JSONSchema::options()
+        jsonschema::options()
             .with_draft(Draft::Draft202012)
-            .compile(&v)
+            .build(&v)
             .expect("controller.schema.json compiles")
     })
 }
 
-fn format_path(path: &jsonschema::paths::JSONPointer) -> String {
+fn format_path(path: &jsonschema::paths::Location) -> String {
     let s = path.to_string();
     if s.is_empty() || s == "/" {
         return "(root)".to_string();
@@ -153,18 +153,24 @@ fn format_path(path: &jsonschema::paths::JSONPointer) -> String {
 
 fn humanise(error: &jsonschema::ValidationError<'_>) -> String {
     use jsonschema::error::ValidationErrorKind as K;
-    match &error.kind {
+    match error.kind() {
         K::Enum { options } => format!(
             "{} is not one of the allowed values ({}).",
-            error.instance, options
+            error.instance(),
+            options
         ),
         K::Maximum { limit } => {
-            format!("{} is greater than the maximum {}.", error.instance, limit)
+            format!(
+                "{} is greater than the maximum {}.",
+                error.instance(),
+                limit
+            )
         }
-        K::Minimum { limit } => format!("{} is less than the minimum {}.", error.instance, limit),
+        K::Minimum { limit } => format!("{} is less than the minimum {}.", error.instance(), limit),
         K::MaxLength { limit } => format!(
             "{} is longer than the maximum length of {} characters.",
-            error.instance, limit
+            error.instance(),
+            limit
         ),
         K::Required { property } => format!("missing required field {}.", property),
         K::AdditionalProperties { unexpected } => {
@@ -177,23 +183,21 @@ fn humanise(error: &jsonschema::ValidationError<'_>) -> String {
                     .join(", ")
             )
         }
-        K::Type { kind } => format!("expected type {:?}, got {}.", kind, error.instance),
+        K::Type { kind } => format!("expected type {:?}, got {}.", kind, error.instance()),
         _ => error.to_string(),
     }
 }
 
-fn run_schema(schema: &JSONSchema, doc: &Value, source: Option<&str>) -> Vec<Issue> {
+fn run_schema(schema: &Validator, doc: &Value, source: Option<&str>) -> Vec<Issue> {
     let prefix = source.map(|s| format!("{s}: ")).unwrap_or_default();
     let mut issues: Vec<Issue> = Vec::new();
-    if let Err(errors) = schema.validate(doc) {
-        for err in errors {
-            let path = format_path(&err.instance_path);
-            issues.push(Issue {
-                severity: Severity::Error,
-                path,
-                message: format!("{prefix}{}", humanise(&err)),
-            });
-        }
+    for err in schema.iter_errors(doc) {
+        let path = format_path(err.instance_path());
+        issues.push(Issue {
+            severity: Severity::Error,
+            path,
+            message: format!("{prefix}{}", humanise(&err)),
+        });
     }
     issues.sort_by(|a, b| a.path.cmp(&b.path));
     issues

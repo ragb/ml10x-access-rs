@@ -8,13 +8,11 @@
 use std::path::PathBuf;
 use std::process::Command;
 
+/// Cargo builds the `ml10x` bin before integration tests and tells us where
+/// it put it. Don't guess from `current_exe()`: newer Cargo keeps test
+/// binaries in a separate build dir, away from the final artifacts.
 fn bin_path() -> PathBuf {
-    let mut p = std::env::current_exe().unwrap();
-    p.pop(); // strip test binary name
-    if p.ends_with("deps") {
-        p.pop();
-    }
-    p.join(if cfg!(windows) { "ml10x.exe" } else { "ml10x" })
+    PathBuf::from(env!("CARGO_BIN_EXE_ml10x"))
 }
 
 const SAMPLE: &str = "tests/fixtures/sample-preset.yaml";

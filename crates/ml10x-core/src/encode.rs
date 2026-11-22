@@ -108,7 +108,7 @@ pub fn encode_simple_preset_with(
 
     let emit_order: Vec<u8> = unrouted
         .into_iter()
-        .chain(routed_gns_in_chain_order.into_iter())
+        .chain(routed_gns_in_chain_order)
         .collect();
 
     for gn in emit_order {

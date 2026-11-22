@@ -92,8 +92,10 @@ impl Config {
             source: e,
         })?;
 
-        let mut cfg = Self::default();
-        cfg.config_path = Some(path);
+        let mut cfg = Self {
+            config_path: Some(path),
+            ..Self::default()
+        };
         if let Some(p) = file.device.port {
             cfg.port = p;
         }

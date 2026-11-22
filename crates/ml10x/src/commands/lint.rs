@@ -58,7 +58,7 @@ pub fn run(ctx: &mut Context, args: Args) -> i32 {
             }
         };
 
-        let mut issues: Vec<Issue> = match serde_yml::from_str::<Value>(&text) {
+        let mut issues: Vec<Issue> = match serde_norway::from_str::<Value>(&text) {
             Ok(raw) => validate_preset_schema(&raw, Some(&f.display().to_string())),
             Err(e) => vec![Issue {
                 severity: Severity::Error,

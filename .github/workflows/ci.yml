@@ -15,14 +15,14 @@ jobs:
     name: native — fmt + test
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
         with:
-          components: rustfmt
+          components: rustfmt, clippy
 
-      # midir 0.10 binds to ALSA on Linux. The runner doesn't ship the dev
+      # midir binds to ALSA on Linux. The runner doesn't ship the dev
       # headers by default.
       - name: Install ALSA dev headers
         run: sudo apt-get update && sudo apt-get install -y libasound2-dev
@@ -32,6 +32,9 @@ jobs:
 
       - name: cargo fmt --check
         run: cargo fmt --all -- --check
+
+      - name: cargo clippy
+        run: cargo clippy --workspace --all-targets --all-features --locked -- -D warnings
 
       - name: cargo test --workspace
         # No --workspace flag for the wasm crate here — it's tested in the
@@ -43,7 +46,7 @@ jobs:
     name: wasm32 — test + build
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Install Rust toolchain (wasm32 target)
         uses: dtolnay/rust-toolchain@stable

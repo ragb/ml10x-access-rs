@@ -32,7 +32,7 @@ pub fn run(ctx: &mut Context, args: Args) -> i32 {
         }
     };
 
-    let raw: Value = match serde_yml::from_str(&text) {
+    let raw: Value = match serde_norway::from_str(&text) {
         Ok(v) => v,
         Err(e) => {
             ctx.out.error(

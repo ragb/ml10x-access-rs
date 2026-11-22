@@ -3,7 +3,7 @@ use std::thread::sleep;
 use std::time::{Duration, Instant};
 
 use serde_json::{Value, json};
-use serde_yml::from_str as yaml_from_str;
+use serde_norway::from_str as yaml_from_str;
 
 use crate::commands::{Context, helpers};
 use crate::device::{HeaderPos, InboundClass};
@@ -155,7 +155,7 @@ pub fn run(ctx: &mut Context, args: Args) -> i32 {
         match load_controller_yaml(p).and_then(|c| {
             encode_controller(&c).map_err(|e| crate::yaml_io::YamlError::Io {
                 path: p.display().to_string(),
-                source: std::io::Error::new(std::io::ErrorKind::Other, e.to_string()),
+                source: std::io::Error::other(e.to_string()),
             })
         }) {
             Ok(bytes) => Some((p.clone(), bytes)),
@@ -183,7 +183,9 @@ pub fn run(ctx: &mut Context, args: Args) -> i32 {
     }
 
     // Pre-encode every preset.
-    let mut encoded: Vec<(PathBuf, Preset, Vec<u8>, Vec<u8>, Vec<u8>)> = Vec::new();
+    // (file, preset, bank-select msg, preset-select msg, save msg)
+    type Encoded = (PathBuf, Preset, Vec<u8>, Vec<u8>, Vec<u8>);
+    let mut encoded: Vec<Encoded> = Vec::new();
     for (f, preset) in loaded {
         let (bank_msg, preset_msg) = match encode_navigate_to(preset.bank, preset.number) {
             Ok(t) => t,

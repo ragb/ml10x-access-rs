@@ -22,7 +22,7 @@ use thiserror::Error;
 use crate::device::{DeviceProfile, HEADER_LENGTH, HeaderPos, ML10X, SEGMENT_LEAD_IN};
 
 #[cfg(feature = "tsify")]
-use tsify_next::Tsify;
+use tsify::Tsify;
 
 pub const SOX: u8 = 0xF0;
 pub const EOX: u8 = 0xF7;
@@ -87,6 +87,7 @@ pub fn checksum(frame_bytes: &[u8]) -> Result<u8, SysexError> {
 }
 
 /// Construct the 16-byte SysEx header, masking each function byte to 7 bits.
+#[allow(clippy::too_many_arguments)] // P1..P8 mirror the eight function bytes of the wire header.
 pub fn build_header_with(
     device: DeviceProfile,
     p1: u8,
@@ -118,6 +119,7 @@ pub fn build_header_with(
 
 /// Convenience: default device (ML10X), all-zero Ps unless specified via
 /// the builder helpers below.
+#[allow(clippy::too_many_arguments)] // P1..P8 mirror the eight function bytes of the wire header.
 pub fn build_header(
     p1: u8,
     p2: u8,
