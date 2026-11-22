@@ -15,7 +15,7 @@ jobs:
     name: native — fmt + test
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
@@ -58,7 +58,7 @@ jobs:
     name: wasm32 — test + build
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
 
       - name: Install Rust toolchain (wasm32 target)
         uses: dtolnay/rust-toolchain@stable
@@ -71,9 +71,10 @@ jobs:
           key: wasm
 
       - name: Install wasm-pack
-        uses: jetli/wasm-pack-action@v0.4.0
+        uses: taiki-e/install-action@v2
         with:
-          version: latest
+          # Pinned so builds are reproducible.
+          tool: wasm-pack@0.15.0
 
       - name: wasm-pack test (node)
         run: wasm-pack test --node crates/ml10x-wasm
@@ -82,7 +83,7 @@ jobs:
         run: wasm-pack build --release --target web --out-dir pkg crates/ml10x-wasm
 
       - name: Upload pkg/ as artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: ml10x-wasm-pkg
           path: crates/ml10x-wasm/pkg/
