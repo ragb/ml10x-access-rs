@@ -1,86 +1,429 @@
 {
-  "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://github.com/ragb/ml10x-access-rs/schemas/controller.schema.json",
-  "title": "ML10X Controller (global settings)",
-  "description": "Device-wide settings that aren't per-preset: MIDI channel, device ID, connector names, per-loop include-in-trails toggles, input split and loop bypass persistent flags. One of these per ML10X.",
-  "type": "object",
-  "required": ["controller"],
-  "additionalProperties": false,
-  "properties": {
-    "controller": {
-      "type": "object",
+  "$defs": {
+    "ConnectorYaml": {
       "additionalProperties": false,
       "properties": {
-        "uuid": {
-          "description": "Read-only device serial reported on connect. Editing this in the YAML has no effect.",
+        "input_name": {
+          "default": "",
+          "maxLength": 16,
           "type": "string"
         },
-        "midi_channel": {
-          "description": "MIDI channel the device listens on. 0 means 'ignore MIDI in'.",
-          "type": "integer",
-          "minimum": 0,
-          "maximum": 16
+        "name": {
+          "default": "",
+          "maxLength": 16,
+          "type": "string"
+        },
+        "output_name": {
+          "default": "",
+          "maxLength": 16,
+          "type": "string"
+        },
+        "short_name": {
+          "default": "",
+          "maxLength": 4,
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "ConnectorsYaml": {
+      "additionalProperties": false,
+      "properties": {
+        "a_ring": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/ConnectorYaml"
+            }
+          ],
+          "default": {
+            "input_name": "",
+            "name": "",
+            "output_name": "",
+            "short_name": ""
+          }
+        },
+        "a_tip": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/ConnectorYaml"
+            }
+          ],
+          "default": {
+            "input_name": "",
+            "name": "",
+            "output_name": "",
+            "short_name": ""
+          }
+        },
+        "b_ring": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/ConnectorYaml"
+            }
+          ],
+          "default": {
+            "input_name": "",
+            "name": "",
+            "output_name": "",
+            "short_name": ""
+          }
+        },
+        "b_tip": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/ConnectorYaml"
+            }
+          ],
+          "default": {
+            "input_name": "",
+            "name": "",
+            "output_name": "",
+            "short_name": ""
+          }
+        },
+        "c_ring": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/ConnectorYaml"
+            }
+          ],
+          "default": {
+            "input_name": "",
+            "name": "",
+            "output_name": "",
+            "short_name": ""
+          }
+        },
+        "c_tip": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/ConnectorYaml"
+            }
+          ],
+          "default": {
+            "input_name": "",
+            "name": "",
+            "output_name": "",
+            "short_name": ""
+          }
+        },
+        "d_ring": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/ConnectorYaml"
+            }
+          ],
+          "default": {
+            "input_name": "",
+            "name": "",
+            "output_name": "",
+            "short_name": ""
+          }
+        },
+        "d_tip": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/ConnectorYaml"
+            }
+          ],
+          "default": {
+            "input_name": "",
+            "name": "",
+            "output_name": "",
+            "short_name": ""
+          }
+        },
+        "e_ring": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/ConnectorYaml"
+            }
+          ],
+          "default": {
+            "input_name": "",
+            "name": "",
+            "output_name": "",
+            "short_name": ""
+          }
+        },
+        "e_tip": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/ConnectorYaml"
+            }
+          ],
+          "default": {
+            "input_name": "",
+            "name": "",
+            "output_name": "",
+            "short_name": ""
+          }
+        },
+        "input_ring": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/ConnectorYaml"
+            }
+          ],
+          "default": {
+            "input_name": "",
+            "name": "",
+            "output_name": "",
+            "short_name": ""
+          }
+        },
+        "input_tip": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/ConnectorYaml"
+            }
+          ],
+          "default": {
+            "input_name": "",
+            "name": "",
+            "output_name": "",
+            "short_name": ""
+          }
+        },
+        "output_ring": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/ConnectorYaml"
+            }
+          ],
+          "default": {
+            "input_name": "",
+            "name": "",
+            "output_name": "",
+            "short_name": ""
+          }
+        },
+        "output_tip": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/ConnectorYaml"
+            }
+          ],
+          "default": {
+            "input_name": "",
+            "name": "",
+            "output_name": "",
+            "short_name": ""
+          }
+        }
+      },
+      "type": "object"
+    },
+    "ControllerYaml": {
+      "additionalProperties": false,
+      "properties": {
+        "connectors": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/ConnectorsYaml"
+            }
+          ],
+          "default": {
+            "a_ring": {
+              "input_name": "",
+              "name": "",
+              "output_name": "",
+              "short_name": ""
+            },
+            "a_tip": {
+              "input_name": "",
+              "name": "",
+              "output_name": "",
+              "short_name": ""
+            },
+            "b_ring": {
+              "input_name": "",
+              "name": "",
+              "output_name": "",
+              "short_name": ""
+            },
+            "b_tip": {
+              "input_name": "",
+              "name": "",
+              "output_name": "",
+              "short_name": ""
+            },
+            "c_ring": {
+              "input_name": "",
+              "name": "",
+              "output_name": "",
+              "short_name": ""
+            },
+            "c_tip": {
+              "input_name": "",
+              "name": "",
+              "output_name": "",
+              "short_name": ""
+            },
+            "d_ring": {
+              "input_name": "",
+              "name": "",
+              "output_name": "",
+              "short_name": ""
+            },
+            "d_tip": {
+              "input_name": "",
+              "name": "",
+              "output_name": "",
+              "short_name": ""
+            },
+            "e_ring": {
+              "input_name": "",
+              "name": "",
+              "output_name": "",
+              "short_name": ""
+            },
+            "e_tip": {
+              "input_name": "",
+              "name": "",
+              "output_name": "",
+              "short_name": ""
+            },
+            "input_ring": {
+              "input_name": "",
+              "name": "",
+              "output_name": "",
+              "short_name": ""
+            },
+            "input_tip": {
+              "input_name": "",
+              "name": "",
+              "output_name": "",
+              "short_name": ""
+            },
+            "output_ring": {
+              "input_name": "",
+              "name": "",
+              "output_name": "",
+              "short_name": ""
+            },
+            "output_tip": {
+              "input_name": "",
+              "name": "",
+              "output_name": "",
+              "short_name": ""
+            }
+          },
+          "description": "Names for each of the 14 connectors. The 'name' (long, up to 16 chars) is what's shown most places; 'short_name' (up to 4) is for compact displays; 'input_name' / 'output_name' (up to 16 each) label the connector when it's the input or output of a chain."
         },
         "device_id": {
+          "default": 0,
           "description": "Per-device routing ID (0..16).",
-          "type": "integer",
-          "minimum": 0,
-          "maximum": 16
+          "format": "uint8",
+          "maximum": 16.0,
+          "minimum": 0.0,
+          "type": "integer"
+        },
+        "include_in_trails": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/IncludeInTrails"
+            }
+          ],
+          "default": {
+            "a_ring": false,
+            "a_tip": false,
+            "b_ring": false,
+            "b_tip": false,
+            "c_ring": false,
+            "c_tip": false,
+            "d_ring": false,
+            "d_tip": false,
+            "e_ring": false,
+            "e_tip": false
+          },
+          "description": "Per-loop 'Enable Spillover' flag from Controller Settings. Only the 10 loops have these toggles in the editor UI — the 4 fixed endpoints (Input Tip/Ring, Output Tip/Ring) have no toggle."
         },
         "input_split": {
+          "default": false,
           "description": "When true, Input Tip and Input Ring are routed independently instead of summed.",
           "type": "boolean"
         },
         "loop_bypass_persistent": {
+          "default": false,
           "description": "When true, loop bypass state persists across preset changes for any loop not explicitly set by the new preset.",
           "type": "boolean"
         },
-        "include_in_trails": {
-          "description": "Per-loop 'Enable Spillover' flag from Controller Settings. Only the 10 loops have these toggles in the editor UI — the 4 fixed endpoints (Input Tip/Ring, Output Tip/Ring) have no toggle.",
-          "type": "object",
-          "additionalProperties": false,
-          "properties": {
-            "a_tip":  { "type": "boolean" }, "a_ring": { "type": "boolean" },
-            "b_tip":  { "type": "boolean" }, "b_ring": { "type": "boolean" },
-            "c_tip":  { "type": "boolean" }, "c_ring": { "type": "boolean" },
-            "d_tip":  { "type": "boolean" }, "d_ring": { "type": "boolean" },
-            "e_tip":  { "type": "boolean" }, "e_ring": { "type": "boolean" }
-          }
+        "midi_channel": {
+          "default": 0,
+          "description": "MIDI channel the device listens on. 0 means 'ignore MIDI in'.",
+          "format": "uint8",
+          "maximum": 16.0,
+          "minimum": 0.0,
+          "type": "integer"
         },
-        "connectors": {
-          "description": "Names for each of the 14 connectors. The 'name' (long, up to 16 chars) is what's shown most places; 'short_name' (up to 4) is for compact displays; 'input_name' / 'output_name' (up to 16 each) label the connector when it's the input or output of a chain.",
-          "type": "object",
-          "additionalProperties": false,
-          "properties": {
-            "a_tip":       { "$ref": "#/$defs/connector" },
-            "a_ring":      { "$ref": "#/$defs/connector" },
-            "b_tip":       { "$ref": "#/$defs/connector" },
-            "b_ring":      { "$ref": "#/$defs/connector" },
-            "c_tip":       { "$ref": "#/$defs/connector" },
-            "c_ring":      { "$ref": "#/$defs/connector" },
-            "d_tip":       { "$ref": "#/$defs/connector" },
-            "d_ring":      { "$ref": "#/$defs/connector" },
-            "e_tip":       { "$ref": "#/$defs/connector" },
-            "e_ring":      { "$ref": "#/$defs/connector" },
-            "input_tip":   { "$ref": "#/$defs/connector" },
-            "input_ring":  { "$ref": "#/$defs/connector" },
-            "output_tip":  { "$ref": "#/$defs/connector" },
-            "output_ring": { "$ref": "#/$defs/connector" }
-          }
+        "uuid": {
+          "default": "",
+          "description": "Read-only device serial reported on connect. Editing this in the YAML has no effect.",
+          "type": "string"
         }
-      }
+      },
+      "type": "object"
+    },
+    "IncludeInTrails": {
+      "description": "Per-loop spillover-enable flag from Controller Settings. Only the 10 loops have toggles in the editor UI — the 4 fixed endpoints have no Enable-Spillover control. Bits 10..13 of segment 33 are unused on v1.2.",
+      "properties": {
+        "a_ring": {
+          "default": false,
+          "type": "boolean"
+        },
+        "a_tip": {
+          "default": false,
+          "type": "boolean"
+        },
+        "b_ring": {
+          "default": false,
+          "type": "boolean"
+        },
+        "b_tip": {
+          "default": false,
+          "type": "boolean"
+        },
+        "c_ring": {
+          "default": false,
+          "type": "boolean"
+        },
+        "c_tip": {
+          "default": false,
+          "type": "boolean"
+        },
+        "d_ring": {
+          "default": false,
+          "type": "boolean"
+        },
+        "d_tip": {
+          "default": false,
+          "type": "boolean"
+        },
+        "e_ring": {
+          "default": false,
+          "type": "boolean"
+        },
+        "e_tip": {
+          "default": false,
+          "type": "boolean"
+        }
+      },
+      "type": "object"
     }
   },
-  "$defs": {
-    "connector": {
-      "type": "object",
-      "additionalProperties": false,
-      "properties": {
-        "name":        { "type": "string", "maxLength": 16 },
-        "short_name":  { "type": "string", "maxLength": 4 },
-        "input_name":  { "type": "string", "maxLength": 16 },
-        "output_name": { "type": "string", "maxLength": 16 }
-      }
+  "$id": "https://github.com/ragb/ml10x-access-rs/schemas/controller.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "ML10X Controller (global settings) YAML document.\n\nDevice-wide settings that aren't per-preset: MIDI channel, device ID, connector names, per-loop include-in-trails toggles, input split and loop bypass persistent flags. One of these per ML10X.",
+  "properties": {
+    "controller": {
+      "$ref": "#/$defs/ControllerYaml"
     }
-  }
+  },
+  "required": [
+    "controller"
+  ],
+  "title": "ML10X Controller (global settings)",
+  "type": "object"
 }

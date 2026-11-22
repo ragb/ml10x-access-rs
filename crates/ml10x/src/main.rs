@@ -62,6 +62,8 @@ enum Commands {
     List(commands::list_cmd::Args),
     /// Validate one or many preset YAMLs without touching the device.
     Lint(commands::lint::Args),
+    /// Emit the JSON Schema for one of the YAML document shapes.
+    Schema(commands::schema_cmd::Args),
 }
 
 /// Initialize the diagnostic logger. Precedence: explicit `--log`,
@@ -143,6 +145,7 @@ fn main() -> ExitCode {
         Commands::Select(a) => commands::select::run(&mut ctx, a),
         Commands::List(a) => commands::list_cmd::run(&mut ctx, a),
         Commands::Lint(a) => commands::lint::run(&mut ctx, a),
+        Commands::Schema(a) => commands::schema_cmd::run(&mut ctx, a),
     };
     ExitCode::from(code as u8)
 }

@@ -1,121 +1,216 @@
 {
-  "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://github.com/ragb/ml10x-access-rs/schemas/preset.schema.json",
-  "title": "ML10X Preset",
-  "description": "One preset on the Morningstar ML10X loop switcher. Note: the ML10X has no per-preset MIDI-message list (that's an MC-series feature); this schema deliberately omits any `midi_messages` field.",
-  "type": "object",
-  "required": ["preset"],
-  "additionalProperties": false,
-  "properties": {
-    "preset": {
-      "type": "object",
-      "required": ["bank", "number", "name", "body"],
+  "$defs": {
+    "ConnectionYaml": {
+      "additionalProperties": false,
+      "properties": {
+        "from_connector": {
+          "$ref": "#/$defs/ConnectorSlug"
+        },
+        "to_connector": {
+          "$ref": "#/$defs/ConnectorSlug"
+        }
+      },
+      "required": [
+        "from_connector",
+        "to_connector"
+      ],
+      "type": "object"
+    },
+    "ConnectorSlug": {
+      "description": "One of the 14 physical connectors on the device. Used as the `from`/`to` of a chain hop and as a key into the connector name table.",
+      "enum": [
+        "a_tip",
+        "a_ring",
+        "b_tip",
+        "b_ring",
+        "c_tip",
+        "c_ring",
+        "d_tip",
+        "d_ring",
+        "e_tip",
+        "e_ring",
+        "input_tip",
+        "input_ring",
+        "output_tip",
+        "output_ring"
+      ],
+      "type": "string"
+    },
+    "PresetBodyYaml": {
+      "oneOf": [
+        {
+          "additionalProperties": false,
+          "properties": {
+            "chain": {
+              "default": [],
+              "description": "Linear signal chain: ordered hops from sources through loops to outputs. Each hop may set `bypass: true` to skip that loop.",
+              "items": {
+                "$ref": "#/$defs/SimpleHopYaml"
+              },
+              "type": "array"
+            },
+            "mode": {
+              "enum": [
+                "simple"
+              ],
+              "type": "string"
+            }
+          },
+          "required": [
+            "mode"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "connections": {
+              "default": [],
+              "description": "Routing graph: each edge connects a source to a destination. Branching and merging are allowed. No `bypass` field — the firmware ignores per-loop bypass in Advanced presets.",
+              "items": {
+                "$ref": "#/$defs/ConnectionYaml"
+              },
+              "type": "array"
+            },
+            "mode": {
+              "enum": [
+                "advanced"
+              ],
+              "type": "string"
+            }
+          },
+          "required": [
+            "mode"
+          ],
+          "type": "object"
+        }
+      ]
+    },
+    "PresetYaml": {
       "additionalProperties": false,
       "properties": {
         "bank": {
           "description": "Which of the 4 banks this preset lives in (matches the editor's 'Bank 1'..'Bank 4' labels).",
-          "type": "integer",
-          "minimum": 1,
-          "maximum": 4
+          "format": "uint8",
+          "maximum": 4.0,
+          "minimum": 1.0,
+          "type": "integer"
         },
-        "number": {
-          "description": "Position within the bank (0 through 127, matching the device's MIDI Program Change numbering).",
-          "type": "integer",
-          "minimum": 0,
-          "maximum": 127
+        "body": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/PresetBodyYaml"
+            }
+          ],
+          "description": "Mode-specific routing. Simple is a linear chain with per-loop bypass; Advanced is an arbitrary connection graph with no per-loop bypass (the firmware does not honour it in Advanced presets)."
         },
         "name": {
           "description": "Display name shown on the ML10X.",
-          "type": "string",
-          "maxLength": 16
+          "maxLength": 16,
+          "type": "string"
+        },
+        "number": {
+          "description": "Position within the bank (0 through 127, matching the device's MIDI Program Change numbering).",
+          "format": "uint8",
+          "maximum": 127.0,
+          "minimum": 0.0,
+          "type": "integer"
         },
         "spillover": {
-          "description": "When the user switches to a different preset, the chosen loop's trail audio continues sounding (provided that loop is bypassed in the next preset). Set per output. 'nothing' is the default.",
-          "type": "object",
-          "additionalProperties": false,
-          "properties": {
-            "output_tip":  { "$ref": "#/$defs/spilloverTarget" },
-            "output_ring": { "$ref": "#/$defs/spilloverTarget" }
-          }
-        },
-        "body": {
-          "description": "Mode-specific routing. Simple is a linear chain with per-loop bypass; Advanced is an arbitrary connection graph with no per-loop bypass (the firmware does not honour it in Advanced presets).",
-          "oneOf": [
-            { "$ref": "#/$defs/simpleBody" },
-            { "$ref": "#/$defs/advancedBody" }
-          ]
+          "allOf": [
+            {
+              "$ref": "#/$defs/SpilloverYaml"
+            }
+          ],
+          "default": {
+            "output_ring": "nothing",
+            "output_tip": "nothing"
+          },
+          "description": "When the user switches to a different preset, the chosen loop's trail audio continues sounding (provided that loop is bypassed in the next preset). Set per output. 'nothing' is the default."
         }
-      }
-    }
-  },
-  "$defs": {
-    "connectorRef": {
-      "type": "string",
-      "enum": [
-        "a_tip", "a_ring",
-        "b_tip", "b_ring",
-        "c_tip", "c_ring",
-        "d_tip", "d_ring",
-        "e_tip", "e_ring",
-        "input_tip", "input_ring",
-        "output_tip", "output_ring"
-      ]
+      },
+      "required": [
+        "bank",
+        "body",
+        "name",
+        "number"
+      ],
+      "type": "object"
     },
-    "spilloverTarget": {
-      "type": "string",
+    "SimpleHopYaml": {
+      "additionalProperties": false,
+      "properties": {
+        "bypass": {
+          "default": false,
+          "type": "boolean"
+        },
+        "from_connector": {
+          "$ref": "#/$defs/ConnectorSlug"
+        },
+        "to_connector": {
+          "$ref": "#/$defs/ConnectorSlug"
+        }
+      },
+      "required": [
+        "from_connector",
+        "to_connector"
+      ],
+      "type": "object"
+    },
+    "SpilloverTarget": {
+      "description": "Spillover can target any of the 10 loops or either input. The editor's `j2` dropdown does NOT include `last_connected` for the ML10X — that's an MC-series feature. The two outputs aren't valid targets (you can't spill audio back into an output).",
       "enum": [
         "nothing",
-        "input_tip", "input_ring",
-        "a_tip", "a_ring",
-        "b_tip", "b_ring",
-        "c_tip", "c_ring",
-        "d_tip", "d_ring",
-        "e_tip", "e_ring"
+        "input_tip",
+        "input_ring",
+        "a_tip",
+        "a_ring",
+        "b_tip",
+        "b_ring",
+        "c_tip",
+        "c_ring",
+        "d_tip",
+        "d_ring",
+        "e_tip",
+        "e_ring"
       ],
-      "default": "nothing"
+      "type": "string"
     },
-    "simpleBody": {
-      "type": "object",
-      "required": ["mode", "chain"],
+    "SpilloverYaml": {
       "additionalProperties": false,
       "properties": {
-        "mode": { "const": "simple" },
-        "chain": {
-          "description": "Linear signal chain: ordered hops from sources through loops to outputs. Each hop may set `bypass: true` to skip that loop.",
-          "type": "array",
-          "items": {
-            "type": "object",
-            "required": ["from_connector", "to_connector"],
-            "additionalProperties": false,
-            "properties": {
-              "from_connector": { "$ref": "#/$defs/connectorRef" },
-              "to_connector":   { "$ref": "#/$defs/connectorRef" },
-              "bypass":         { "type": "boolean", "default": false }
+        "output_ring": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/SpilloverTarget"
             }
-          }
-        }
-      }
-    },
-    "advancedBody": {
-      "type": "object",
-      "required": ["mode", "connections"],
-      "additionalProperties": false,
-      "properties": {
-        "mode": { "const": "advanced" },
-        "connections": {
-          "description": "Routing graph: each edge connects a source to a destination. Branching and merging are allowed. No `bypass` field — the firmware ignores per-loop bypass in Advanced presets.",
-          "type": "array",
-          "items": {
-            "type": "object",
-            "required": ["from_connector", "to_connector"],
-            "additionalProperties": false,
-            "properties": {
-              "from_connector": { "$ref": "#/$defs/connectorRef" },
-              "to_connector":   { "$ref": "#/$defs/connectorRef" }
+          ],
+          "default": "nothing"
+        },
+        "output_tip": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/SpilloverTarget"
             }
-          }
+          ],
+          "default": "nothing"
         }
-      }
+      },
+      "type": "object"
     }
-  }
+  },
+  "$id": "https://github.com/ragb/ml10x-access-rs/schemas/preset.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "ML10X preset YAML document.\n\nOne preset on the Morningstar ML10X loop switcher. Note: the ML10X has no per-preset MIDI-message list (that's an MC-series feature); this schema deliberately omits any `midi_messages` field.",
+  "properties": {
+    "preset": {
+      "$ref": "#/$defs/PresetYaml"
+    }
+  },
+  "required": [
+    "preset"
+  ],
+  "title": "ML10X Preset",
+  "type": "object"
 }

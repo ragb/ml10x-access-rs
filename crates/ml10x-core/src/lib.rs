@@ -18,6 +18,8 @@ pub mod handshake;
 pub mod inbound;
 #[cfg_attr(feature = "tsify", allow(deprecated))]
 pub mod presets;
+#[cfg(feature = "schema")]
+pub mod schema;
 #[cfg_attr(feature = "tsify", allow(deprecated))]
 pub mod sysex;
 #[cfg_attr(feature = "tsify", allow(deprecated))]

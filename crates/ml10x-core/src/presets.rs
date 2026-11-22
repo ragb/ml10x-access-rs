@@ -16,6 +16,7 @@ use tsify::Tsify;
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[cfg_attr(feature = "tsify", derive(Tsify))]
 #[cfg_attr(feature = "tsify", tsify(into_wasm_abi, from_wasm_abi))]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[serde(rename_all = "snake_case")]
 pub enum LoopState {
     On,
@@ -29,6 +30,7 @@ pub enum LoopState {
 #[derive(Copy, Clone, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
 #[cfg_attr(feature = "tsify", derive(Tsify))]
 #[cfg_attr(feature = "tsify", tsify(into_wasm_abi, from_wasm_abi))]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[serde(rename_all = "snake_case")]
 pub enum SpilloverTarget {
     #[default]
@@ -91,6 +93,7 @@ impl SpilloverTarget {
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Hash, Serialize, Deserialize)]
 #[cfg_attr(feature = "tsify", derive(Tsify))]
 #[cfg_attr(feature = "tsify", tsify(into_wasm_abi, from_wasm_abi))]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[serde(rename_all = "snake_case")]
 pub enum ConnectorSlug {
     ATip,
@@ -190,6 +193,7 @@ impl ConnectorSlug {
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(feature = "tsify", derive(Tsify))]
 #[cfg_attr(feature = "tsify", tsify(into_wasm_abi, from_wasm_abi))]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct SimpleHop {
     pub from_connector: ConnectorSlug,
     pub to_connector: ConnectorSlug,
@@ -202,6 +206,7 @@ pub struct SimpleHop {
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(feature = "tsify", derive(Tsify))]
 #[cfg_attr(feature = "tsify", tsify(into_wasm_abi, from_wasm_abi))]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct Connection {
     pub from_connector: ConnectorSlug,
     pub to_connector: ConnectorSlug,
@@ -211,6 +216,7 @@ pub struct Connection {
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(feature = "tsify", derive(Tsify))]
 #[cfg_attr(feature = "tsify", tsify(into_wasm_abi, from_wasm_abi))]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct Spillover {
     #[serde(default)]
     pub output_tip: SpilloverTarget,
@@ -233,6 +239,7 @@ impl Default for Spillover {
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[cfg_attr(feature = "tsify", derive(Tsify))]
 #[cfg_attr(feature = "tsify", tsify(into_wasm_abi, from_wasm_abi))]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[serde(rename_all = "snake_case")]
 pub enum PresetMode {
     Simple,
@@ -247,6 +254,7 @@ pub enum PresetMode {
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(feature = "tsify", derive(Tsify))]
 #[cfg_attr(feature = "tsify", tsify(into_wasm_abi, from_wasm_abi))]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[serde(tag = "mode", rename_all = "snake_case")]
 pub enum PresetBody {
     Simple {
@@ -283,6 +291,7 @@ impl Default for PresetBody {
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(feature = "tsify", derive(Tsify))]
 #[cfg_attr(feature = "tsify", tsify(into_wasm_abi, from_wasm_abi))]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct Preset {
     pub bank: u8,
     pub number: u8,
@@ -316,6 +325,7 @@ impl Preset {
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(feature = "tsify", derive(Tsify))]
 #[cfg_attr(feature = "tsify", tsify(into_wasm_abi, from_wasm_abi))]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct Connector {
     #[serde(default)]
     pub name: String,
@@ -333,6 +343,7 @@ pub struct Connector {
 #[derive(Copy, Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(feature = "tsify", derive(Tsify))]
 #[cfg_attr(feature = "tsify", tsify(into_wasm_abi, from_wasm_abi))]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct IncludeInTrails {
     #[serde(default)]
     pub a_tip: bool,
@@ -360,6 +371,7 @@ pub struct IncludeInTrails {
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(feature = "tsify", derive(Tsify))]
 #[cfg_attr(feature = "tsify", tsify(into_wasm_abi, from_wasm_abi))]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct Connectors {
     #[serde(default)]
     pub a_tip: Connector,
@@ -395,6 +407,7 @@ pub struct Connectors {
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(feature = "tsify", derive(Tsify))]
 #[cfg_attr(feature = "tsify", tsify(into_wasm_abi, from_wasm_abi))]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct Controller {
     #[serde(default)]
     pub uuid: String,

@@ -47,30 +47,59 @@ pub enum YamlError {
 
 // ---------- Preset shim ----------
 
+/// ML10X preset YAML document.
+///
+/// One preset on the Morningstar ML10X loop switcher. Note: the ML10X has
+/// no per-preset MIDI-message list (that's an MC-series feature); this
+/// schema deliberately omits any `midi_messages` field.
 #[derive(Debug, Serialize, Deserialize)]
-struct PresetDoc {
+#[serde(deny_unknown_fields)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+#[cfg_attr(feature = "schema", schemars(title = "ML10X Preset"))]
+pub(crate) struct PresetDoc {
     preset: PresetYaml,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 struct PresetYaml {
+    /// Which of the 4 banks this preset lives in (matches the editor's
+    /// 'Bank 1'..'Bank 4' labels).
+    #[cfg_attr(feature = "schema", schemars(range(min = 1, max = 4)))]
     bank: u8, // 1..4 in YAML, mapped to/from 0..3 internal
+    /// Position within the bank (0 through 127, matching the device's MIDI
+    /// Program Change numbering).
+    #[cfg_attr(feature = "schema", schemars(range(min = 0, max = 127)))]
     number: u8,
+    /// Display name shown on the ML10X.
+    #[cfg_attr(feature = "schema", schemars(length(max = 16)))]
     name: String,
+    /// When the user switches to a different preset, the chosen loop's
+    /// trail audio continues sounding (provided that loop is bypassed in
+    /// the next preset). Set per output. 'nothing' is the default.
     #[serde(default)]
     spillover: SpilloverYaml,
+    /// Mode-specific routing. Simple is a linear chain with per-loop
+    /// bypass; Advanced is an arbitrary connection graph with no per-loop
+    /// bypass (the firmware does not honour it in Advanced presets).
     body: PresetBodyYaml,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
-#[serde(tag = "mode", rename_all = "snake_case")]
+#[serde(tag = "mode", rename_all = "snake_case", deny_unknown_fields)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 enum PresetBodyYaml {
     Simple {
+        /// Linear signal chain: ordered hops from sources through loops to
+        /// outputs. Each hop may set `bypass: true` to skip that loop.
         #[serde(default)]
         chain: Vec<SimpleHopYaml>,
     },
     Advanced {
+        /// Routing graph: each edge connects a source to a destination.
+        /// Branching and merging are allowed. No `bypass` field — the
+        /// firmware ignores per-loop bypass in Advanced presets.
         #[serde(default)]
         connections: Vec<ConnectionYaml>,
     },
@@ -78,6 +107,7 @@ enum PresetBodyYaml {
 
 #[derive(Debug, Default, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 struct SpilloverYaml {
     #[serde(default)]
     output_tip: crate::presets::SpilloverTarget,
@@ -105,6 +135,7 @@ impl From<SpilloverYaml> for Spillover {
 
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 struct SimpleHopYaml {
     from_connector: crate::presets::ConnectorSlug,
     to_connector: crate::presets::ConnectorSlug,
@@ -134,6 +165,7 @@ impl From<SimpleHopYaml> for SimpleHop {
 
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 struct ConnectionYaml {
     from_connector: crate::presets::ConnectorSlug,
     to_connector: crate::presets::ConnectorSlug,
@@ -215,32 +247,62 @@ pub fn preset_from_yaml_str(text: &str, source_label: &str) -> Result<Preset, Ya
 
 // ---------- Controller shim ----------
 
+/// ML10X Controller (global settings) YAML document.
+///
+/// Device-wide settings that aren't per-preset: MIDI channel, device ID,
+/// connector names, per-loop include-in-trails toggles, input split and
+/// loop bypass persistent flags. One of these per ML10X.
 #[derive(Debug, Serialize, Deserialize)]
-struct ControllerDoc {
+#[serde(deny_unknown_fields)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+#[cfg_attr(
+    feature = "schema",
+    schemars(title = "ML10X Controller (global settings)")
+)]
+pub(crate) struct ControllerDoc {
     controller: ControllerYaml,
 }
 
 #[derive(Debug, Default, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 struct ControllerYaml {
+    /// Read-only device serial reported on connect. Editing this in the
+    /// YAML has no effect.
     #[serde(default)]
     uuid: String,
+    /// MIDI channel the device listens on. 0 means 'ignore MIDI in'.
+    #[cfg_attr(feature = "schema", schemars(range(min = 0, max = 16)))]
     #[serde(default)]
     midi_channel: u8,
+    /// Per-device routing ID (0..16).
+    #[cfg_attr(feature = "schema", schemars(range(min = 0, max = 16)))]
     #[serde(default)]
     device_id: u8,
+    /// When true, Input Tip and Input Ring are routed independently
+    /// instead of summed.
     #[serde(default)]
     input_split: bool,
+    /// When true, loop bypass state persists across preset changes for any
+    /// loop not explicitly set by the new preset.
     #[serde(default)]
     loop_bypass_persistent: bool,
+    /// Per-loop 'Enable Spillover' flag from Controller Settings. Only the
+    /// 10 loops have these toggles in the editor UI — the 4 fixed
+    /// endpoints (Input Tip/Ring, Output Tip/Ring) have no toggle.
     #[serde(default)]
     include_in_trails: IncludeInTrails,
+    /// Names for each of the 14 connectors. The 'name' (long, up to 16
+    /// chars) is what's shown most places; 'short_name' (up to 4) is for
+    /// compact displays; 'input_name' / 'output_name' (up to 16 each)
+    /// label the connector when it's the input or output of a chain.
     #[serde(default)]
     connectors: ConnectorsYaml,
 }
 
 #[derive(Debug, Default, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 struct ConnectorsYaml {
     #[serde(default)]
     a_tip: ConnectorYaml,
@@ -274,13 +336,18 @@ struct ConnectorsYaml {
 
 #[derive(Debug, Default, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 struct ConnectorYaml {
+    #[cfg_attr(feature = "schema", schemars(length(max = 16)))]
     #[serde(default)]
     name: String,
+    #[cfg_attr(feature = "schema", schemars(length(max = 4)))]
     #[serde(default)]
     short_name: String,
+    #[cfg_attr(feature = "schema", schemars(length(max = 16)))]
     #[serde(default)]
     input_name: String,
+    #[cfg_attr(feature = "schema", schemars(length(max = 16)))]
     #[serde(default)]
     output_name: String,
 }

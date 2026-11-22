@@ -15,12 +15,13 @@ name = "ml10x"
 path = "src/main.rs"
 
 [dependencies]
-ml10x-core = { path = "../ml10x-core" }
+ml10x-core = { path = "../ml10x-core", features = ["schema"] }
 serde = { workspace = true }
 serde_json = { workspace = true }
 serde_norway = { workspace = true }
 thiserror = { workspace = true }
 log = { workspace = true }
+schemars = { workspace = true }
 # CLI-only — keep these in the crate that uses them.
 toml = "1"
 dirs = "7"

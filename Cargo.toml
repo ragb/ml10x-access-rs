@@ -29,3 +29,8 @@ pretty_assertions = "1"
 # and ml10x-wasm (always on).
 tsify = { version = "0.5.8", default-features = false, features = ["js"] }
 wasm-bindgen = "0.2"
+# Optional in ml10x-core (behind `schema` feature), always on in the CLI.
+# Used to derive JSON Schemas for the YAML envelope types and emit them via
+# `ml10x schema <kind>`. The checked-in schemas/*.json are the generated
+# output; CI re-runs the command and `git diff`s to catch drift.
+schemars = "0.8"

@@ -11,6 +11,7 @@ pub mod helpers;
 pub mod lint;
 pub mod list_cmd;
 pub mod ports;
+pub mod schema_cmd;
 pub mod select;
 pub mod show;
 pub mod sync;

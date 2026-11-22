@@ -42,6 +42,18 @@ jobs:
         # to ml10x-core + ml10x.
         run: cargo test --locked
 
+      - name: Verify schemas/ are up to date
+        # Regenerates the committed JSON Schemas from the schemars derives
+        # and fails if they drift. If this step fails locally, run:
+        #   cargo run --release --bin ml10x -- schema preset     > schemas/preset.schema.json
+        #   cargo run --release --bin ml10x -- schema controller > schemas/controller.schema.json
+        # and commit the result.
+        run: |
+          cargo run --release --bin ml10x --locked -- schema preset     > /tmp/preset.schema.json
+          cargo run --release --bin ml10x --locked -- schema controller > /tmp/controller.schema.json
+          diff -u schemas/preset.schema.json     /tmp/preset.schema.json
+          diff -u schemas/controller.schema.json /tmp/controller.schema.json
+
   wasm:
     name: wasm32 — test + build
     runs-on: ubuntu-latest
